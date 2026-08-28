@@ -1,0 +1,607 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(feature = "std")]
+include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
+
+extern crate alloc;
+
+use alloc::{borrow::Cow, vec::Vec};
+
+use crate::sp_api_hidden_includes_construct_runtime::hidden_include::genesis_builder_helper::{
+    build_state, get_preset,
+};
+
+use frame_support::{
+    construct_runtime, parameter_types,
+    traits::{ConstU128, ConstU32, Everything, WithdrawReasons},
+    weights::{ConstantMultiplier, IdentityFee, Weight},
+};
+use frame_system as system;
+
+use sp_api::impl_runtime_apis;
+use sp_core::{OpaqueMetadata, H256};
+use sp_runtime::{
+    generic, impl_opaque_keys,
+    traits::{AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, Verify},
+    transaction_validity::{TransactionSource, TransactionValidity},
+    ApplyExtrinsicResult, MultiSignature,
+};
+use sp_version::RuntimeVersion;
+
+// ===== Base types =====
+pub type BlockNumber = u32;
+pub type Signature = MultiSignature;
+pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
+pub type Index = u32;
+pub type Hash = H256;
+pub type Balance = u128;
+pub type Moment = u64;
+
+// ===== Monetary units =====
+pub const DECIMALS: Balance = 1_000_000_000_000_000_000; // 10^18 (nakamishi)
+pub const EXISTENTIAL_DEPOSIT: Balance = DECIMALS / 10_000; // 0.0001 ERA
+
+// ===== Time =====
+pub const MILLISECS_PER_BLOCK: u64 = 6_000;
+pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
+
+// ===== Extrinsic & block (runtime) =====
+pub type Address = sp_runtime::MultiAddress<AccountId, ()>;
+
+pub type SignedExtra = (
+    frame_system::CheckNonZeroSender<Runtime>,
+    frame_system::CheckSpecVersion<Runtime>,
+    frame_system::CheckTxVersion<Runtime>,
+    frame_system::CheckGenesis<Runtime>,
+    frame_system::CheckMortality<Runtime>,
+    frame_system::CheckNonce<Runtime>,
+    frame_system::CheckWeight<Runtime>,
+    pallet_transaction_payment::ChargeTransactionPayment<Runtime>,
+);
+
+pub type UncheckedExtrinsic =
+    generic::UncheckedExtrinsic<Address, RuntimeCall, Signature, SignedExtra>;
+
+pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
+pub type Block = generic::Block<Header, UncheckedExtrinsic>;
+
+// ===== Opaque types (node) =====
+pub mod opaque {
+    use super::*;
+    pub use sp_runtime::OpaqueExtrinsic as UncheckedExtrinsic;
+    pub type Header = sp_runtime::generic::Header<BlockNumber, sp_runtime::traits::BlakeTwo256>;
+    pub type Block = sp_runtime::generic::Block<Header, UncheckedExtrinsic>;
+    pub type BlockId = sp_runtime::generic::BlockId<Block>;
+}
+
+// ===== Runtime version =====
+parameter_types! {
+    pub const BlockHashCount: BlockNumber = 2400;
+    pub const SS58Prefix: u16 = 42;
+    pub const Version: RuntimeVersion = VERSION;
+}
+
+impl system::Config for Runtime {
+    type BaseCallFilter = Everything;
+    type BlockWeights = ();
+    type BlockLength = ();
+    type DbWeight = ();
+    type RuntimeOrigin = RuntimeOrigin;
+    type RuntimeCall = RuntimeCall;
+    type Nonce = Index;
+    type Hash = Hash;
+    type Hashing = BlakeTwo256;
+    type AccountId = AccountId;
+    type Lookup = AccountIdLookup<AccountId, ()>;
+    type Block = Block;
+    type RuntimeEvent = RuntimeEvent;
+    type BlockHashCount = BlockHashCount;
+    type Version = Version;
+    type PalletInfo = PalletInfo;
+    type AccountData = pallet_balances::AccountData<Balance>;
+    type OnNewAccount = ();
+    type OnKilledAccount = ();
+    type SystemWeightInfo = ();
+    type SS58Prefix = SS58Prefix;
+    type MaxConsumers = ConstU32<16>;
+
+    // present on this SDK tag
+    type RuntimeTask = ();
+    type ExtensionsWeightInfo = ();
+    type OnSetCode = ();
+    type SingleBlockMigrations = ();
+    type MultiBlockMigrator = ();
+    type PreInherents = ();
+    type PostInherents = ();
+    type PostTransactions = ();
+}
+
+// ===== Timestamp =====
+parameter_types! {
+    pub const MinimumPeriod: Moment = (SLOT_DURATION / 2) as Moment;
+}
+impl pallet_timestamp::Config for Runtime {
+    type Moment = Moment;
+    // BABE must be notified when timestamp is set (slot progression)
+    type OnTimestampSet = Babe;
+    type MinimumPeriod = MinimumPeriod;
+    type WeightInfo = ();
+}
+
+// ===== Balances =====
+parameter_types! {
+    pub const ExistentialDeposit: Balance = EXISTENTIAL_DEPOSIT;
+}
+impl pallet_balances::Config for Runtime {
+    type Balance = Balance;
+    type DustRemoval = ();
+    type RuntimeEvent = RuntimeEvent;
+    type ExistentialDeposit = ExistentialDeposit;
+    type AccountStore = system::Pallet<Runtime>;
+    type MaxLocks = ConstU32<50>;
+    type MaxReserves = ConstU32<50>;
+    type ReserveIdentifier = [u8; 8];
+    type WeightInfo = ();
+    // present on this SDK line:
+    type RuntimeHoldReason = RuntimeHoldReason;
+    type RuntimeFreezeReason = ();
+    type FreezeIdentifier = ();
+    type MaxFreezes = ConstU32<0>;
+    type DoneSlashHandler = ();
+}
+
+// ===== Transaction Payment =====
+impl pallet_transaction_payment::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type OnChargeTransaction =
+        pallet_transaction_payment::CurrencyAdapter<pallet_balances::Pallet<Runtime>, ()>;
+    type OperationalFeeMultiplier = frame_support::traits::ConstU8<5>;
+    type WeightToFee = IdentityFee<Balance>;
+    type LengthToFee = ConstantMultiplier<Balance, ConstU128<0>>;
+    type FeeMultiplierUpdate = ();
+    type WeightInfo = ();
+}
+
+// ===== Sudo =====
+impl pallet_sudo::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type RuntimeCall = RuntimeCall;
+    type WeightInfo = ();
+}
+
+// ===== Session keys (BABE + GRANDPA) =====
+pub mod session_keys {
+    use super::*;
+    impl_opaque_keys! {
+        pub struct SessionKeys {
+            pub babe: pallet_babe::AuthorityId,
+            pub grandpa: pallet_grandpa::AuthorityId,
+        }
+    }
+}
+pub use session_keys::SessionKeys;
+
+// ===== Session =====
+impl pallet_session::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type SessionManager = pallet_session::historical::NoteHistoricalRoot<Runtime, Staking>;
+    type Keys = SessionKeys;
+    type ShouldEndSession = pallet_babe::Pallet<Runtime>;
+    type NextSessionRotation = pallet_babe::Pallet<Runtime>;
+    type SessionHandler = (pallet_babe::Pallet<Runtime>, pallet_grandpa::Pallet<Runtime>);
+    type ValidatorId = <Self as system::Config>::AccountId;
+    type ValidatorIdOf = sp_runtime::traits::ConvertInto;
+    type DisablingStrategy = ();
+    type WeightInfo = ();
+}
+impl pallet_session::historical::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type FullIdentification = pallet_staking::Exposure<AccountId, Balance>;
+    type FullIdentificationOf = pallet_staking::ExposureOf<Runtime>;
+}
+
+// ===== Authorship (v1.19.1 minimal) =====
+impl pallet_authorship::Config for Runtime {
+    // Map BABE author index -> AccountId via Session
+    type FindAuthor = pallet_session::FindAccountFromAuthorIndex<Self, Babe>;
+    // Hook for pallets wanting author events (keep empty for now)
+    type EventHandler = ();
+}
+
+// ===== BABE =====
+parameter_types! {
+    pub const EpochDuration: u64 = 10 * 60 * 1000 / MILLISECS_PER_BLOCK; // ~10 minutes in blocks
+    pub const ExpectedBlockTime: u64 = MILLISECS_PER_BLOCK;
+    pub const MaxBabeAuthorities: u32 = 1_000;
+}
+impl pallet_babe::Config for Runtime {
+    type EpochDuration = EpochDuration;
+    type ExpectedBlockTime = ExpectedBlockTime;
+    type EpochChangeTrigger = pallet_babe::ExternalTrigger;
+    type DisabledValidators = ();
+    type KeyOwnerProof = sp_session::MembershipProof;
+    type EquivocationReportSystem = ();
+    type MaxAuthorities = MaxBabeAuthorities;
+    type WeightInfo = ();
+    // present on this SDK line
+    type MaxNominators = ConstU32<0>;
+}
+
+// ===== GRANDPA =====
+parameter_types! {
+    pub const MaxSetIdSessionEntries: u64 = 32;
+    pub const MaxGrandpaAuthorities: u32 = 1_000;
+}
+impl pallet_grandpa::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type KeyOwnerProof = sp_session::MembershipProof;
+    type EquivocationReportSystem = ();
+    type MaxAuthorities = MaxGrandpaAuthorities;
+    type MaxSetIdSessionEntries = MaxSetIdSessionEntries;
+    type WeightInfo = ();
+    // present on this SDK line
+    type MaxNominators = ConstU32<0>;
+}
+
+// ===== Staking (NoElection provider) =====
+parameter_types! {
+    pub const SessionsPerEra: sp_staking::SessionIndex = 6;
+    pub const BondingDuration: sp_staking::EraIndex = 24;
+    pub const SlashDeferDuration: sp_staking::EraIndex = 24;
+    pub const HistoryDepth: u32 = 84;
+    pub const MaxUnlocking: u32 = 32;
+    pub const MaxExposurePageSize: u32 = 4096;
+    pub const MaxValidatorSet: u32 = 1000;
+    pub const MaxControllersInDeprecationBatch: u32 = 0;
+}
+
+type NoElectionProvider = frame_election_provider_support::NoElection<(
+    AccountId,
+    BlockNumber,
+    pallet_staking::Pallet<Runtime>,
+    ConstU32<64>,
+    ConstU32<64>,
+)>;
+
+// Minimal type to satisfy `BenchmarkingConfig`
+pub struct StakingBenchCfg;
+impl pallet_staking::BenchmarkingConfig for StakingBenchCfg {
+    type MaxValidators = ConstU32<1000>;
+    type MaxNominators = ConstU32<20000>;
+}
+
+impl pallet_staking::Config for Runtime {
+    type Currency = pallet_balances::Pallet<Runtime>;
+    type CurrencyBalance = Balance;
+    type UnixTime = pallet_timestamp::Pallet<Runtime>;
+    type RuntimeEvent = RuntimeEvent;
+
+    type Slash = ();
+    type Reward = ();
+    type RewardRemainder = ();
+    type SessionsPerEra = SessionsPerEra;
+    type BondingDuration = BondingDuration;
+    type SlashDeferDuration = SlashDeferDuration;
+
+    type SessionInterface = Self;
+
+    // Keep payout simple: use the unit type which implements `EraPayout`
+    type EraPayout = ();
+    type NextNewSession = ();
+    type HistoryDepth = HistoryDepth;
+    type EventListeners = ();
+
+    type VoterList = pallet_staking::UseNominatorsAndValidatorsMap<Runtime>;
+    type TargetList = pallet_staking::UseValidatorsMap<Runtime>;
+    type MaxUnlockingChunks = MaxUnlocking;
+    type NominationsQuota = pallet_staking::FixedNominationsQuota<16>;
+
+    type ElectionProvider = NoElectionProvider;
+    type GenesisElectionProvider = NoElectionProvider;
+
+    type OldCurrency = pallet_balances::Pallet<Runtime>;
+    type RuntimeHoldReason = RuntimeHoldReason;
+    type CurrencyToVote = sp_staking::currency_to_vote::U128CurrencyToVote;
+    type AdminOrigin = frame_system::EnsureRoot<AccountId>;
+    type MaxExposurePageSize = MaxExposurePageSize;
+    type MaxValidatorSet = MaxValidatorSet;
+    type MaxControllersInDeprecationBatch = MaxControllersInDeprecationBatch;
+    type Filter = ();
+
+    type BenchmarkingConfig = StakingBenchCfg;
+    type WeightInfo = ();
+}
+
+// ===== Vesting =====
+pub struct AllReasons;
+impl sp_core::Get<WithdrawReasons> for AllReasons {
+    fn get() -> WithdrawReasons {
+        WithdrawReasons::all()
+    }
+}
+impl pallet_vesting::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type Currency = pallet_balances::Pallet<Runtime>;
+    type BlockNumberToBalance = sp_runtime::traits::ConvertInto;
+    type MinVestedTransfer = ConstU128<{ DECIMALS / 1_000 }>;
+    type WeightInfo = ();
+    type BlockNumberProvider = frame_system::Pallet<Runtime>;
+    type UnvestedFundsAllowedWithdrawReasons = AllReasons;
+    const MAX_VESTING_SCHEDULES: u32 = 128;
+}
+
+// ===== Executive =====
+pub type Executive = frame_executive::Executive<
+    Runtime,
+    Block,
+    system::ChainContext<Runtime>,
+    Runtime,
+    AllPalletsWithSystem,
+>;
+
+// ===== Pallet inclusion =====
+construct_runtime! {
+    pub enum Runtime
+    where
+        Block = Block,
+        NodeBlock = opaque::Block,
+        UncheckedExtrinsic = UncheckedExtrinsic
+    {
+        System: frame_system,
+        // Expose the inherent so timestamp extrinsic exists
+        Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
+        Balances: pallet_balances,
+        TransactionPayment: pallet_transaction_payment,
+        Sudo: pallet_sudo,
+
+        Session: pallet_session::{Pallet, Call, Storage, Event<T>, Config<T>},
+        Historical: pallet_session::historical::{Pallet, Event<T>},
+  
+        Authorship: pallet_authorship,
+
+        Staking: pallet_staking,
+        Vesting: pallet_vesting,
+    }
+}
+
+// ===== Runtime APIs =====
+impl_runtime_apis! {
+    impl sp_session::SessionKeys<Block> for Runtime {
+        fn generate_session_keys(seed: Option<Vec<u8>>) -> Vec<u8> {
+            SessionKeys::generate(seed)
+        }
+        fn decode_session_keys(encoded: Vec<u8>) -> Option<Vec<(Vec<u8>, sp_core::crypto::KeyTypeId)>> {
+            SessionKeys::decode_into_raw_public_keys(&encoded)
+        }
+    }
+
+    // ------------ Core ------------
+    impl sp_api::Core<Block> for Runtime {
+        fn version() -> RuntimeVersion { VERSION }
+
+        fn execute_block(block: Block) {
+            Executive::execute_block(block);
+        }
+
+        fn initialize_block(header: &<Block as BlockT>::Header) -> sp_runtime::ExtrinsicInclusionMode {
+            Executive::initialize_block(header)
+        }
+    }
+
+    // ------------ Metadata ------------
+    impl sp_api::Metadata<Block> for Runtime {
+        fn metadata() -> OpaqueMetadata {
+            OpaqueMetadata::new(Runtime::metadata().into())
+        }
+
+        fn metadata_at_version(version: u32) -> Option<OpaqueMetadata> {
+            Runtime::metadata_at_version(version)
+        }
+
+        fn metadata_versions() -> alloc::vec::Vec<u32> {
+            Runtime::metadata_versions()
+        }
+    }
+
+    // ------------ Block Builder ------------
+    impl sp_block_builder::BlockBuilder<Block> for Runtime {
+        fn apply_extrinsic(extrinsic: <Block as BlockT>::Extrinsic) -> ApplyExtrinsicResult {
+            Executive::apply_extrinsic(extrinsic)
+        }
+        fn finalize_block() -> <Block as BlockT>::Header {
+            Executive::finalize_block()
+        }
+        fn inherent_extrinsics(data: sp_inherents::InherentData) -> Vec<<Block as BlockT>::Extrinsic> {
+            data.create_extrinsics()
+        }
+        fn check_inherents(block: Block, data: sp_inherents::InherentData)
+            -> sp_inherents::CheckInherentsResult
+        {
+            data.check_extrinsics(&block)
+        }
+    }
+
+    // ------------ Tx Pool ------------
+    impl sp_transaction_pool::runtime_api::TaggedTransactionQueue<Block> for Runtime {
+        fn validate_transaction(
+            source: TransactionSource,
+            tx: <Block as BlockT>::Extrinsic,
+            block_hash: <Block as BlockT>::Hash,
+        ) -> TransactionValidity {
+            Executive::validate_transaction(source, tx, block_hash)
+        }
+    }
+
+    // ------------ System RPC helpers ------------
+    impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Index> for Runtime {
+        fn account_nonce(account: AccountId) -> Index {
+            system::Account::<Runtime>::get(account).nonce
+        }
+    }
+
+    impl pallet_transaction_payment_rpc_runtime_api::TransactionPaymentApi<Block, Balance> for Runtime {
+        fn query_info(uxt: <Block as BlockT>::Extrinsic, len: u32)
+            -> pallet_transaction_payment_rpc_runtime_api::RuntimeDispatchInfo<Balance>
+        {
+            pallet_transaction_payment::Pallet::<Runtime>::query_info(uxt, len)
+        }
+        fn query_fee_details(uxt: <Block as BlockT>::Extrinsic, len: u32)
+            -> pallet_transaction_payment_rpc_runtime_api::FeeDetails<Balance>
+        {
+            pallet_transaction_payment::Pallet::<Runtime>::query_fee_details(uxt, len)
+        }
+        fn query_weight_to_fee(weight: Weight) -> Balance {
+            pallet_transaction_payment::Pallet::<Runtime>::weight_to_fee(weight)
+        }
+        fn query_length_to_fee(length: u32) -> Balance {
+            pallet_transaction_payment::Pallet::<Runtime>::length_to_fee(length)
+        }
+    }
+
+    // ------------ BABE API ------------
+    impl sp_consensus_babe::BabeApi<Block> for Runtime {
+        fn configuration() -> sp_consensus_babe::BabeConfiguration {
+            use sp_consensus_babe::{AllowedSlots, BabeConfiguration};
+
+            let epoch_len: u64 = EpochDuration::get();
+
+            BabeConfiguration {
+                slot_duration: ExpectedBlockTime::get(),
+                epoch_length: epoch_len,
+                // c = primary slot probability = 1/4
+                c: (1, 4),
+                authorities: pallet_babe::Authorities::<Runtime>::get().to_vec(),
+                randomness: pallet_babe::Randomness::<Runtime>::get(),
+                allowed_slots: AllowedSlots::PrimaryAndSecondaryPlainSlots,
+            }
+        }
+
+        fn current_epoch_start() -> sp_consensus_babe::Slot {
+            use sp_runtime::traits::SaturatedConversion;
+
+            let curr = pallet_babe::CurrentSlot::<Runtime>::get();
+            let len: u64 = EpochDuration::get();
+
+            let curr_u64: u64 = curr.saturated_into();
+            let start_u64 = curr_u64 - (curr_u64 % len);
+            sp_consensus_babe::Slot::from(start_u64)
+        }
+
+        fn current_epoch() -> sp_consensus_babe::Epoch {
+            use sp_consensus_babe::{AllowedSlots, BabeEpochConfiguration, Epoch, Slot};
+            use sp_runtime::traits::SaturatedConversion;
+
+            let curr: Slot = pallet_babe::CurrentSlot::<Runtime>::get();
+            let len: u64 = EpochDuration::get();
+
+            let curr_u64: u64 = curr.saturated_into();
+            let start_u64 = curr_u64 - (curr_u64 % len);
+            let start_slot = Slot::from(start_u64);
+
+            Epoch {
+                start_slot,
+                duration: len,
+                authorities: pallet_babe::Authorities::<Runtime>::get().to_vec(),
+                randomness: pallet_babe::Randomness::<Runtime>::get(),
+                // v1.19.1 expects a concrete config (not Option)
+                config: BabeEpochConfiguration {
+                    c: (1, 4),
+                    allowed_slots: AllowedSlots::PrimaryAndSecondaryPlainSlots,
+                },
+                epoch_index: 0,
+            }
+        }
+
+        fn next_epoch() -> sp_consensus_babe::Epoch {
+            use sp_consensus_babe::{AllowedSlots, BabeEpochConfiguration, Epoch, Slot};
+            use sp_runtime::traits::SaturatedConversion;
+
+            let curr: Slot = pallet_babe::CurrentSlot::<Runtime>::get();
+            let len: u64 = EpochDuration::get();
+
+            let curr_u64: u64 = curr.saturated_into();
+            let start_u64 = curr_u64 - (curr_u64 % len);
+            let start_next = Slot::from(start_u64 + len);
+
+            Epoch {
+                start_slot: start_next,
+                duration: len,
+                authorities: pallet_babe::Authorities::<Runtime>::get().to_vec(),
+                randomness: pallet_babe::Randomness::<Runtime>::get(),
+                config: BabeEpochConfiguration {
+                    c: (1, 4),
+                    allowed_slots: AllowedSlots::PrimaryAndSecondaryPlainSlots,
+                },
+                epoch_index: 1,
+            }
+        }
+
+        fn generate_key_ownership_proof(
+            _slot: sp_consensus_babe::Slot,
+            _authority_id: sp_consensus_babe::AuthorityId,
+        ) -> Option<sp_consensus_babe::OpaqueKeyOwnershipProof> {
+            None
+        }
+
+        fn submit_report_equivocation_unsigned_extrinsic(
+            _proof: sp_consensus_babe::EquivocationProof<Header>,
+            _key_owner_proof: sp_consensus_babe::OpaqueKeyOwnershipProof,
+        ) -> Option<()> {
+            None
+        }
+    }
+
+    // ------------ GRANDPA API ------------
+    impl sp_consensus_grandpa::GrandpaApi<Block> for Runtime {
+        fn grandpa_authorities() -> sp_consensus_grandpa::AuthorityList {
+            pallet_grandpa::Pallet::<Runtime>::grandpa_authorities()
+        }
+
+        fn current_set_id() -> sp_consensus_grandpa::SetId {
+            pallet_grandpa::CurrentSetId::<Runtime>::get()
+        }
+
+        fn submit_report_equivocation_unsigned_extrinsic(
+            _equivocation_proof: sp_consensus_grandpa::EquivocationProof<
+                <Block as sp_runtime::traits::Block>::Hash,
+                sp_runtime::traits::NumberFor<Block>,
+            >,
+            _key_owner_proof: sp_runtime::OpaqueValue,
+        ) -> Option<()> {
+            None
+        }
+
+        fn generate_key_ownership_proof(
+            _set_id: sp_consensus_grandpa::SetId,
+            _authority_id: sp_consensus_grandpa::AuthorityId,
+        ) -> Option<sp_runtime::OpaqueValue> {
+            None
+        }
+    }
+
+    // ------------ Genesis builder passthrough (for chain spec tooling) ------------
+    impl sp_genesis_builder::GenesisBuilder<Block> for Runtime {
+        fn build_state(config: Vec<u8>) -> sp_genesis_builder::Result {
+            build_state::<RuntimeGenesisConfig>(config)
+        }
+        fn get_preset(id: &Option<sp_genesis_builder::PresetId>) -> Option<Vec<u8>> {
+            get_preset::<RuntimeGenesisConfig>(id, |_name| None)
+        }
+        fn preset_names() -> Vec<sp_genesis_builder::PresetId> {
+            Vec::new()
+        }
+    }
+}
+
+#[sp_version::runtime_version]
+pub const VERSION: RuntimeVersion = RuntimeVersion {
+    spec_name: Cow::Borrowed("era"),
+    impl_name: Cow::Borrowed("era"),
+    authoring_version: 1,
+    spec_version: 1,
+    impl_version: 1,
+    apis: RUNTIME_API_VERSIONS,
+    transaction_version: 1,
+    system_version: 1,
+};
+

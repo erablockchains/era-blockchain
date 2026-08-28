@@ -1,0 +1,31 @@
+# Rust and Substrate build output
+/target/
+**/target/
+
+# Local caches and editor state
+.cache/
+.idea/
+.vscode/
+*.log
+*.tmp
+
+# Secrets and local configuration
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Node and chain state
+chains/
+base-path/
+*.db
+*.sqlite
+*.sqlite3
+
+# Images, virtual disks, and generated runtime artifacts
+*.iso
+*.vhd
+*.vhdx
+*.wasm

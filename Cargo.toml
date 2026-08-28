@@ -1,0 +1,96 @@
+[workspace]
+members = [
+  "node",
+  "runtime",
+  "pallets/ai-predictions",
+  "pallets/era-worlds",
+  "pallets/reward-reserve",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "Apache-2.0"
+authors = ["Era Contributors"]
+
+# Pin Substrate/FRAME crates to SDK tag here (no [features] at root, no optional flags).
+[workspace.dependencies]
+# FRAME core
+frame-support   = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+frame-system    = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+frame-executive = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+frame-system-rpc-runtime-api = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+frame-election-provider-support = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+
+# Pallets used by runtime
+pallet-timestamp           = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+pallet-balances            = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+pallet-transaction-payment = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+pallet-sudo                = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+pallet-session             = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", features = ["historical"], default-features = false }
+pallet-babe                = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+pallet-grandpa             = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+pallet-staking             = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+pallet-vesting             = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+pallet-multisig            = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+pallet-proxy               = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+pallet-assets              = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+pallet-nfts                = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+pallet-era-worlds          = { path = "pallets/era-worlds", default-features = false }
+pallet-reward-reserve      = { path = "pallets/reward-reserve", default-features = false }
+
+# SP primitives
+sp-api        = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+sp-core       = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+sp-io         = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+sp-runtime    = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+sp-version    = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+sp-session    = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+sp-staking    = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+sp-inherents  = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+sp-block-builder = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+sp-blockchain    = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+sp-offchain   = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+sp-timestamp  = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+sp-consensus-babe    = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+sp-consensus-grandpa = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+sp-transaction-pool = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+sp-genesis-builder = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+# SC (node stack)
+sc-service            = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1" }
+sc-cli                = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1" }
+sc-client-api         = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1" }
+sc-executor           = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1" }
+sc-network            = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1" }
+sc-transaction-pool   = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1" }
+sc-transaction-pool-api = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1" }
+sc-consensus          = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1" }
+sc-consensus-babe     = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1" }
+sc-consensus-grandpa  = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1" }
+sc-basic-authorship   = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1" }
+sc-offchain           = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1" }
+sc-telemetry          = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1" }
+sc-chain-spec         = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1" }
+
+# RPC helper often used by nodes
+substrate-frame-rpc-system = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1" }
+
+# Build helpers
+substrate-build-script-utils = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1" }
+substrate-wasm-builder       = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+
+# crates.io deps that node inherits via `workspace = true`
+# === External crates (from crates.io) ===
+parity-scale-codec = { version = "3.6.9", default-features = false }
+scale-info = { version = "2.8.0", default-features = false }
+serde_json = { version = "1.0.96", default-features = false, features = ["alloc"] }
+serde = { version = "1.0.188", default-features = false, features = ["derive"] }
+codec = { package = "parity-scale-codec", version = "3.6.9", default-features = false, features = ["derive"] }
+futures    = { version = "0.3.28" }
+clap       = { version = "4.3.19" }
+jsonrpsee  = { version = "0.24.9" }
+yamux = "=0.13.5"
+tokio = { version = "1.47.1", default-features = false, features = ["net", "time", "rt", "macros", "io-util", "sync"] }
+
+# === Local Crates ===
+frame-metadata-hash-extension = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.19.1", default-features = false }

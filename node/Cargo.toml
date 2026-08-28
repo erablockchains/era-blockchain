@@ -1,0 +1,83 @@
+[package]
+name = "era-node"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+# Local runtime
+era-runtime = { path = "../runtime", default-features = false, features = ["std"] }
+
+# Substrate node stack (pinned via workspace or directly)
+sc-cli               = { workspace = true }
+sc-service           = { workspace = true }
+sc-client-api        = { workspace = true }
+sc-executor          = { workspace = true }
+sc-network           = { workspace = true }
+sc-telemetry         = { workspace = true }
+sc-transaction-pool  = { workspace = true }
+sc-transaction-pool-api = { workspace = true }
+sc-consensus         = { workspace = true }
+sc-consensus-babe    = { workspace = true }
+sc-consensus-grandpa = { workspace = true }
+sc-basic-authorship  = { workspace = true }
+sc-offchain          = { workspace = true }
+sc-chain-spec        = { workspace = true }
+sc-rpc-api = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1" }
+
+# RPC
+# RpcModule comes from jsonrpsee; DenyUnsafe/SubscriptionTaskExecutor live under sc_service::rpc
+jsonrpsee = { workspace = true }
+substrate-frame-rpc-system = { workspace = true }
+pallet-transaction-payment-rpc = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1" }
+frame-metadata-hash-extension.workspace = true
+frame-system-rpc-runtime-api = { workspace = true, default-features = false, features = ["std"] }
+frame-benchmarking-cli = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", optional = true }
+frame-support       = { workspace = true, features = ["std"] }
+sp-genesis-builder  = { workspace = true, features = ["std"] }
+parity-scale-codec  = { workspace = true, features = ["derive"] }
+
+# Primitives used by node generics
+sp-runtime         = { workspace = true }
+sp-core            = { workspace = true }
+sp-api             = { workspace = true }
+sp-io              = { workspace = true }
+sp-block-builder   = { workspace = true }
+sp-timestamp       = { workspace = true }
+sp-consensus-babe  = { workspace = true }
+sp-blockchain      = { workspace = true }
+sp-transaction-pool = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+
+# Pallets referenced by chain-spec
+pallet-staking = { workspace = true, default-features = false, features = ["std"] }
+pallet-vesting = { workspace = true, default-features = false, features = ["std"] }
+pallet-grandpa = { workspace = true, default-features = false, features = ["std"] }
+pallet-babe    = { workspace = true, default-features = false, features = ["std"] }
+pallet-transaction-payment-rpc-runtime-api = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false, features = ["std"] }
+
+# Common utils
+serde       = { workspace = true, default-features = true, features = ["derive"] }
+serde_json  = { workspace = true, default-features = true }
+clap        = { workspace = true }
+futures     = { workspace = true }
+hex-literal = "0.4"
+hex = "0.4"
+log         = "0.4"
+once_cell = "1.18"
+async-trait = "0.1"
+# Optional benchmarking (opt-in only)
+sp-keyring = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", optional = true }
+# Prometheus registry crate from the SDK (package name in the repo!)
+prometheus-endpoint = { package = "substrate-prometheus-endpoint", git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.19.1" }
+
+# NotificationMetrics provider
+polkadot-node-network-protocol = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.19.1" }
+
+[build-dependencies]
+substrate-build-script-utils = { workspace = true }
+
+[features]
+runtime-benchmarks = ["frame-benchmarking-cli", "frame-benchmarking-cli/runtime-benchmarks", "sp-keyring", "era-runtime/runtime-benchmarks"]
+net-metrics-default = []
+grandpa-notif-from-network = []
+default = []
