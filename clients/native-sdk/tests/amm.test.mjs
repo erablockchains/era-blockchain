@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {encodeAmmCall} from '../sdk/era-v14-amm.mjs';
+test('AMM asset identities cannot be substituted by a marketing symbol',()=>{assert.throws(()=>encodeAmmCall('createPool',{assetA:'NativeEtkn',assetB:'USDC',deadline:100}),/explicit Registered/);assert.throws(()=>encodeAmmCall('createPool',{assetA:'NativeEtkn',assetB:'NativeEtkn',deadline:100}),/identical/);});
+test('AMM creation has explicit wrapper and fungible variants',()=>{assert.equal(encodeAmmCall('createPool',{assetA:'NativeEtkn',assetB:{Registered:7},deadline:100}),'0x180000010700000064000000');});
+test('AMM swaps require AccountId32 and bounded unsigned values',()=>{assert.throws(()=>encodeAmmCall('swapExactInput',{assetIn:'NativeEtkn',assetOut:{Registered:7},amountIn:-1,minOut:0,recipient:'0x'+'01'.repeat(32),deadline:100}),/bound/);});
+
+test('unsafe JavaScript amounts cannot silently round an AMM transfer',()=>{const args={assetIn:'NativeEtkn',assetOut:{Registered:7},amountIn:1e18,minOut:1,recipient:'0x'+'01'.repeat(32),deadline:100};assert.throws(()=>encodeAmmCall('swapExactInput',args),/exact integer/);assert.equal(encodeAmmCall('swapExactInput',{...args,amountIn:'1000000000000000000'}),encodeAmmCall('swapExactInput',{...args,amountIn:1000000000000000000n}));});

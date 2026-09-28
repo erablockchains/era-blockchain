@@ -1,10 +1,11 @@
-# Third-party notices
+# Third-party licensing and notices
 
-ERA depends on the Polkadot SDK at commit
-`f3969c7ddd34985e6e709ed458bcc519f651682a` and crates resolved in `Cargo.lock`. Individual SDK
-crates carry their own Apache-2.0 or GPL-3.0-or-later declarations; release packaging must retain the
-applicable licence files, copyright notices, and source obligations.
+ERA-authored code retains the owner-approved Apache-2.0 terms. Upstream/copied/generated code retains its own licences. This is a mixed-license source snapshot; no blanket relicensing or independent legal certification is claimed.
 
-`pallet-assets` and `pallet-nfts` are Apache-2.0 components from that SDK revision. Generated code,
-vendored files, artwork, fonts, and historical documentation still require a complete owner-reviewed
-provenance inventory. This draft is not a legal determination.
+THIRD_PARTY_LICENSES.tsv is the existing provenance inventory filtered to the 1,189 root Cargo.lock identities. It includes dormant/target-specific/lock-only packages, not a claim that all are linked into a binary. `licenses/` contains all445 referenced distinct licence/notice texts, verified by their historical hashes. `licenses/SHA256SUMS` binds each text. Additional author-specific ruint/alloy root texts are bound in [vendor-license-supplement.json](provenance/vendor-license-supplement.json) at the exact archive VCS commits; these replace no original notices. Full dependency archives are not shipped in this source snapshot; Cargo.lock records their identities/checksums.
+
+Required notices include cfg_aliases/tectonic_cfg_support (`1e2b7ade3fb228130408b9990cae6a7618eb314c75aa0b164bfe485d9d9756ee`), Moka/Caffeine (`f6d3f84b39d597c19748c6b50a04abe1634edb3c0b15392daa217ec44119f652`), and ring0.16.20 (`76b39f9b371688eac9d8323f96ee80b3aef5ecbc2217f25377bd4e4a615296a9`, lock-only identity). This product includes software developed by the OpenSSL Project and cryptographic software written by Eric Young. Consult the exact texts for all required acknowledgements and conditions.
+
+Polkadot SDK is pinned at f3969c7ddd34985e6e709ed458bcc519f651682a and retains component-specific Apache/GPL/other terms. Modified pallet-nfts preserves upstream notices and its own provenance. Five vendor forks preserve original manifest declarations and modification records. The unchanged Hickory RSA fixture is upstream public disposable test material, never an operational identity.
+
+Registry packages whose published archive contains only a manifest licence declaration are explicitly classified as such in the TSV. The historical generator used inherited/fallback texts for some vendor manifest-only packages; those are retained as historical inventory, not a new author-specific grant. Any binary distribution must separately review corresponding-source and notice obligations for its actual linked surfaces. This candidate distributes source and the already-public genesis-embedded runtime; no node binary or CI build artifact is published.

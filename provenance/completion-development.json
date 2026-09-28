@@ -1,0 +1,20 @@
+{
+  "status": "DEPLOYED_SPEC15_SOURCE_SNAPSHOT_PUBLICATION_NOT_APPROVED",
+  "continued_from_commit": "82dcb0d05335ab1ec2de0232fb7b968366d7a53a",
+  "deployed_source_commit": "a2ba1935c342912c31cc8fad44a220ce63e8d594",
+  "deployed_source_tree": "09fd25bcf4206c4812a28543a2bee7c5e13e2e31",
+  "deployed_source_archive_sha256": "641090e6ef5dffec65a8b716eadfaeba29dbe0c5a7be757928ccd83be3e07623",
+  "public_candidate_parent_commit": "17c22ce897fa31d720eea632fd1e6a717185c20f",
+  "product": "V14",
+  "production_spec_version": 15,
+  "transaction_version": 1,
+  "candidate_node_sha256": "fab3fb82f6f6de2fe1be02b9b6916f67413eb8b4e15a4eedca3852700e0536ad",
+  "candidate_compressed_wasm_sha256": "122af167022227c46b2b74d99f5d3a73f41f8d65bb4a8a1de7b88b6e986de2af",
+  "candidate_raw_wasm_sha256": "eb7b1d5b7a7a3d0a90c06e832c49e2081e5834c72bebc04e5a2eb7adbd80a6fc",
+  "candidate_metadata_sha256": "c188b00f3589677fe7ecfa833d92d884858ad642a6d231d52696298edbe91d40",
+  "runtime_upgrade_finalized_block": 118480,
+  "nine_host_node_rollout_accepted": true,
+  "publication_paused": true,
+  "source_binding": "SOURCE-SHA256SUMS covers the public candidate. Authenticated external release records bind the deployed source archive to the deployed Wasm and node artifacts. Final review commit and archive identities are recorded outside this file to avoid circular self-identification.",
+  "historical_evidence": "release.json, deployed source manifests and original patch/redaction records remain dated initial-release provenance; current production status is summarized in README.md and docs/VALIDATION.md."
+}

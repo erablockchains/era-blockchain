@@ -1,0 +1,34 @@
+[
+  {
+    "call": "0x0c290000000000000000c85c11e44f16457e76dff8354118f991979c032a781c269c3283735e2fe720b5942f4f30dcd8864c37cba56b9b1f4d4660ce2ff9a5228a3841137a0a40520b280757fe5237a01ca655156bf84ce4224c166cb3d8b6b0b0d177d7e609952d80d548666978747572653a2f2f656e76656c6f70650064000000607edd7000000000e0eedd7000000000",
+    "envelope": {
+      "artifact_sha256": "942f4f30dcd8864c37cba56b9b1f4d4660ce2ff9a5228a3841137a0a40520b28",
+      "baseline_c": 20.0,
+      "cutoff_utc": 1893564000,
+      "evidence_after_utc": 1893592800,
+      "fixture": true,
+      "forecast_c": 20.0,
+      "generated_utc": 1893563600,
+      "input_sha256": "c381f6d2851963b18cf9787cfbafabd38f79ee1979efaf770258262aa8a97eed",
+      "model_id": 0,
+      "model_version": "1",
+      "request_id": "c85c11e44f16457e76dff8354118f991979c032a781c269c3283735e2fe720b5",
+      "schema": "era-station-temperature-v1",
+      "target_utc": 1893585600,
+      "terms_sha256": "d3e03307854e65f819cd22c301ebc6624174158b94e2a93303438def179ea4e7",
+      "threshold_c": 25,
+      "trained_model": false
+    },
+    "committed_json": "{\"artifact_sha256\":\"942f4f30dcd8864c37cba56b9b1f4d4660ce2ff9a5228a3841137a0a40520b28\",\"baseline_c\":20.0,\"cutoff_utc\":1893564000,\"evidence_after_utc\":1893592800,\"fixture\":true,\"forecast_c\":20.0,\"generated_utc\":1893563600,\"input_sha256\":\"c381f6d2851963b18cf9787cfbafabd38f79ee1979efaf770258262aa8a97eed\",\"model_id\":0,\"model_version\":\"1\",\"request_id\":\"c85c11e44f16457e76dff8354118f991979c032a781c269c3283735e2fe720b5\",\"schema\":\"era-station-temperature-v1\",\"target_utc\":1893585600,\"terms_sha256\":\"d3e03307854e65f819cd22c301ebc6624174158b94e2a93303438def179ea4e7\",\"threshold_c\":25,\"trained_model\":false}",
+    "sha256": "0757fe5237a01ca655156bf84ce4224c166cb3d8b6b0b0d177d7e609952d80d5"
+  },
+  {
+    "call": "0x0c2a00000000000000000000000088b17878c4045968becafdf7c8fd8503c5a10a2bc7ebfab346ebd57ca9910a9b02",
+    "evidence": {
+      "status": "unavailable",
+      "fixture": true
+    },
+    "committed_json": "{\"fixture\":true,\"status\":\"unavailable\"}",
+    "sha256": "88b17878c4045968becafdf7c8fd8503c5a10a2bc7ebfab346ebd57ca9910a9b"
+  }
+]

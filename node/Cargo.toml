@@ -1,10 +1,17 @@
 [package]
 name = "era-node"
 version = "0.1.0"
-edition = "2021"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
 publish = false
 
 [dependencies]
+# Fresh-genesis offline Wasm execution (existing pinned SDK dependencies)
+sp-state-machine.workspace = true
+pallet-timestamp = { workspace = true, features = ["std"] }
+pallet-security-budget = { workspace = true, features = ["std"] }
+
 # Local runtime
 era-runtime = { path = "../runtime", default-features = false, features = ["std"] }
 

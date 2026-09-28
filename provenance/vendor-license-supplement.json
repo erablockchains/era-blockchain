@@ -1,0 +1,26 @@
+[
+  {
+    "component": "ruint",
+    "source_commit": "57232ed0df4792d8688b4d75f0508a1520874b14",
+    "url": "https://raw.githubusercontent.com/recmo/uint/57232ed0df4792d8688b4d75f0508a1520874b14/LICENSE",
+    "sha256": "9de1e5b5b50b059e58009b7044705557dd07ec87555bca518bef8b5acc002908",
+    "bytes": 1093,
+    "purpose": "Author-specific root license from exact archive VCS revision; supplementary to inherited historical inventory"
+  },
+  {
+    "component": "alloy",
+    "source_commit": "e55993f69d91f36fdb501d54e11a8265f90e42c1",
+    "url": "https://raw.githubusercontent.com/alloy-rs/core/e55993f69d91f36fdb501d54e11a8265f90e42c1/LICENSE-MIT",
+    "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "bytes": 1023,
+    "purpose": "Author-specific root license from exact archive VCS revision; supplementary to inherited historical inventory"
+  },
+  {
+    "component": "alloy",
+    "source_commit": "e55993f69d91f36fdb501d54e11a8265f90e42c1",
+    "url": "https://raw.githubusercontent.com/alloy-rs/core/e55993f69d91f36fdb501d54e11a8265f90e42c1/LICENSE-APACHE",
+    "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "bytes": 9723,
+    "purpose": "Author-specific root license from exact archive VCS revision; supplementary to inherited historical inventory"
+  }
+]

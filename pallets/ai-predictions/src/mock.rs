@@ -79,8 +79,11 @@ impl pallet_balances::Config for Test {
 }
 
 impl pallet_ai_predictions::Config for Test {
+    type NowSeconds = frame_support::traits::ConstU64<1>;
+    type FinancialModesAllowed = frame_support::traits::ConstBool<true>;
     type Currency = Balances;
     type PalletId = AiPredictionsPalletId;
+    type PenaltyDestination = frame_support::traits::ConstU64<99>;
     type MaxHashLen = ConstU32<128>;
     type MaxMetadataUriLen = ConstU32<256>;
     type MaxCategoryCodeLen = ConstU32<96>;
@@ -95,7 +98,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
         .expect("Genesis storage should build");
 
     pallet_balances::GenesisConfig::<Test> {
-        balances: vec![(ALICE, 1_000_000), (BOB, 1_000_000), (VALIDATOR, 1_000_000)],
+        balances: vec![(ALICE, 1_000_000), (BOB, 1_000_000), (VALIDATOR, 1_000_000), (99, 1)],
         ..Default::default()
     }
     .assimilate_storage(&mut storage)

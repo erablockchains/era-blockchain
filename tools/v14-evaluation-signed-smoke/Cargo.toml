@@ -1,0 +1,14 @@
+[package]
+name = "era-v14-evaluation-signed-smoke"
+version = "0.1.0"
+authors = ["ERA Contributors"]
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+[workspace]
+
+[dependencies]
+subxt = "0.41.0"
+subxt-signer = "0.41.0"
+tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread"] }

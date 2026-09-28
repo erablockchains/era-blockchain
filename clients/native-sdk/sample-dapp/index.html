@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src http://127.0.0.1:* http://localhost:* http://[::1]:*; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    >
+    <title>ERA V14 read-only review</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">PRIVATE REVIEW DRAFT · READ ONLY</p>
+      <h1>ERA V14 node identity</h1>
+      <p>
+        Inspect a loopback review node using implemented standard RPCs. This page cannot sign or
+        submit transactions and makes no live-network claim.
+      </p>
+
+      <form id="connect-form">
+        <label for="endpoint">Loopback JSON-RPC endpoint</label>
+        <div class="controls">
+          <input id="endpoint" name="endpoint" type="url" value="http://127.0.0.1:9944" required>
+          <button type="submit">Connect</button>
+        </div>
+      </form>
+
+      <p id="status" role="status" aria-live="polite">Idle. No request has been sent.</p>
+      <dl id="snapshot" hidden>
+        <div><dt>Chain</dt><dd data-field="chain"></dd></div>
+        <div><dt>Node</dt><dd data-field="node"></dd></div>
+        <div><dt>Best block</dt><dd data-field="block"></dd></div>
+        <div><dt>Spec version</dt><dd data-field="spec"></dd></div>
+        <div><dt>Transaction version</dt><dd data-field="transaction"></dd></div>
+        <div><dt>Peers</dt><dd data-field="peers"></dd></div>
+        <div><dt>Syncing</dt><dd data-field="syncing"></dd></div>
+      </dl>
+      <p class="boundary">
+        Expected candidate identity: spec 14, transaction 1. Verify genesis, source, Wasm, and
+        metadata hashes separately before relying on any later integrated candidate. A separate
+        offline example exercises the standard injected-wallet signer contract with a synthetic
+        mocked provider; this page remains read-only and has no submission path.
+      </p>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

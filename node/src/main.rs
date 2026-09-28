@@ -3,6 +3,9 @@
 #![warn(rust_2018_idioms)]
 
 mod chain_spec;
+mod fresh_check;
+mod upgrade_check;
+mod offline_scenario;
 mod cli;
 mod command;
 mod rpc;

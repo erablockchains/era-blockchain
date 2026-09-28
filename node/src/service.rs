@@ -129,6 +129,24 @@ pub fn new_partial(
     })
 }
 
+/// Bind maintenance to the supplied genesis, including child trie state and the genesis
+/// Wasm's own state version. Build the expected root in memory; never regenerate chain history.
+pub fn verify_maintenance_genesis(config:&Configuration,client:&FullClient)->ServiceResult<()> {
+    use sp_blockchain::HeaderBackend;
+    use sp_runtime::traits::{HashingFor,Block as _};
+    let storage=config.chain_spec.build_storage().map_err(|e|boxed_service_error(ServiceError::Other(e)))?;
+    let executor=sc_service::new_wasm_executor::<sp_io::SubstrateHostFunctions>(&config.executor);
+    let version=sc_chain_spec::resolve_state_version_from_wasm::<_,HashingFor<Block>>(&storage,&executor).map_err(boxed_service_error)?;
+    let code=storage.top.get(sp_core::storage::well_known_keys::CODE).cloned().ok_or_else(||boxed_service_error(ServiceError::Other("Genesis code missing".into())))?;
+    let mut ext=sp_io::TestExternalities::new_with_code_and_state(&code,storage,version);
+    let root=ext.execute_with(||sp_io::storage::root(version));
+    if root.len()!=32{return Err(boxed_service_error(ServiceError::Other("Invalid genesis state root length".into())))}
+    let expected=sc_chain_spec::construct_genesis_block::<Block>(sp_core::H256::from_slice(&root),version).header().hash();
+    let actual=client.info().genesis_hash;
+    if expected!=actual {return Err(boxed_service_error(ServiceError::Other(format!("Maintenance refused: chain specification genesis {expected:?} does not match database genesis {actual:?}"))))}
+    Ok(())
+}
+
 /// Build and start the full service (node).
 pub fn new_full(mut config: Configuration) -> ServiceResult<(TaskManager, Arc<FullClient>)> {
     let PartialComponents {
@@ -387,4 +405,65 @@ mod tests {
         let _: sc_executor::WasmExecutor<sp_io::SubstrateHostFunctions> =
             sc_service::new_wasm_executor(&config);
     }
+}
+
+/// Consensus-verifying queue for offline maintenance, using the same pinned imports as new_full.
+pub fn maintenance_import_queue(config: &Configuration, client: Arc<FullClient>, select_chain: SelectChain, tx_pool: Arc<ExPool>, task_manager: &TaskManager) -> ServiceResult<sc_consensus::DefaultImportQueue<Block>> {
+    // --- GRANDPA block import + link ---
+    let (grandpa_block_import, _grandpa_link) = sc_consensus_grandpa::block_import(
+        client.clone(),
+        512u32, // justification_generation_period (matches template constant)
+        &client as &dyn GenesisAuthoritySetProvider<Block>,
+        select_chain.clone(),
+        None,
+    )
+    .map_err(boxed_service_error)?;
+
+    // --- BABE configuration from runtime + block import / link ---
+    let babe_cfg = sc_consensus_babe::configuration(&*client).map_err(boxed_service_error)?;
+    let (babe_block_import, babe_link) = sc_consensus_babe::block_import(
+        babe_cfg.clone(),
+        grandpa_block_import.clone(),
+        client.clone(),
+    )
+    .map_err(boxed_service_error)?;
+
+    let slot_duration = babe_cfg.slot_duration();
+
+    // --- BABE import queue ---
+    let non_essential_spawner = NonEssentialSpawner(task_manager.spawn_handle());
+
+    let (import_queue, _babe_worker_handle) =
+        sc_consensus_babe::import_queue::<Block, FullClient, SelectChain, _, _, _>(
+            sc_consensus_babe::ImportQueueParams {
+                link: babe_link.clone(),
+                block_import: babe_block_import.clone(),
+                justification_import: Some(Box::new(grandpa_block_import.clone())),
+                registry: config.prometheus_registry(),
+                spawner: &non_essential_spawner, // satisfies SpawnEssentialNamed
+                client: client.clone(),
+                select_chain: select_chain.clone(),
+                create_inherent_data_providers: move |_, ()| {
+                    let slot_duration = slot_duration;
+                    async move {
+                        // Timestamp from system time
+                        let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
+
+                        // BABE slot from timestamp + slot duration
+                        let slot = BabeInherentProvider::from_timestamp_and_slot_duration(
+                            *timestamp,
+                            slot_duration,
+                        );
+
+                        // v1.19 order: (slot, timestamp)
+                        Ok((slot, timestamp))
+                    }
+                },
+                offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(tx_pool.clone()),
+                telemetry: None,
+            },
+        )
+        .map_err(boxed_service_error)?;
+
+    Ok(import_queue)
 }

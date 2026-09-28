@@ -2,11 +2,19 @@
 members = [
   "node",
   "runtime",
+  "pallets/nfts",
   "pallets/ai-predictions",
   "pallets/era-worlds",
   "pallets/reward-reserve",
+  "pallets/security-budget",
+  "pallets/validator-security",
+  "pallets/custody-governance",
+  "pallets/era-v14-application-primitives",
+  "pallets/era-v14-amm",
+  "tools/security-backport-smoke",
 ]
 resolver = "2"
+exclude = ["vendor", "tools/v14-dependency-regressions"]
 
 [workspace.package]
 edition = "2021"
@@ -18,6 +26,7 @@ authors = ["Era Contributors"]
 # FRAME core
 frame-support   = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
 frame-system    = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+frame-benchmarking = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
 frame-executive = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
 frame-system-rpc-runtime-api = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
 frame-election-provider-support = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
@@ -35,9 +44,10 @@ pallet-vesting             = { git = "https://github.com/paritytech/polkadot-sdk
 pallet-multisig            = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
 pallet-proxy               = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
 pallet-assets              = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
-pallet-nfts                = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
+pallet-nfts                = { path = "pallets/nfts", default-features = false }
 pallet-era-worlds          = { path = "pallets/era-worlds", default-features = false }
 pallet-reward-reserve      = { path = "pallets/reward-reserve", default-features = false }
+pallet-security-budget     = { path = "pallets/security-budget", default-features = false }
 
 # SP primitives
 sp-api        = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
@@ -87,6 +97,7 @@ serde_json = { version = "1.0.96", default-features = false, features = ["alloc"
 serde = { version = "1.0.188", default-features = false, features = ["derive"] }
 codec = { package = "parity-scale-codec", version = "3.6.9", default-features = false, features = ["derive"] }
 futures    = { version = "0.3.28" }
+finality-grandpa = { version = "0.16.3", default-features = false }
 clap       = { version = "4.3.19" }
 jsonrpsee  = { version = "0.24.9" }
 yamux = "=0.13.5"
@@ -94,3 +105,22 @@ tokio = { version = "1.47.1", default-features = false, features = ["net", "time
 
 # === Local Crates ===
 frame-metadata-hash-extension = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.19.1", default-features = false }
+
+sp-state-machine = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1" }
+
+[patch.crates-io]
+# Exact registry sources with the bounded CVE-2024-8508 / RUSTSEC-2026-0119
+# name-compression work-limit fix backported from Hickory PR #3615.
+hickory-proto-024 = { package = "hickory-proto", path = "vendor/hickory-proto-0.24.4" }
+hickory-proto-025 = { package = "hickory-proto", path = "vendor/hickory-proto-0.25.2" }
+# RUSTSEC-2025-0073 / CVE-2025-62370: exact 1.1.2 source with the
+# encode_type empty-linearization check backported from fixed 1.4.1.
+alloy-dyn-abi = { path = "vendor/alloy-dyn-abi-1.1.2-security" }
+# Rust-1.87-compatible upstream-provenance security backports. Each vendor
+# directory retains the exact published crate source and license files.
+ruint = { path = "vendor/ruint-1.15.0-security" }
+time = { path = "vendor/time-0.3.44-security" }
+
+# Rust 1.87 security backports for GHSA-5hq8-qhww-jm7q and GHSA-7gcf-g7xr-8hxj.
+libp2p-quic = { path = "vendor/libp2p-quic-0.11.1-security" }
+serde_with = { path = "vendor/serde_with-3.15.1-security" }

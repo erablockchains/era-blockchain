@@ -1,7 +1,9 @@
 [package]
 name = "era-runtime"
 version = "0.1.0"
-edition = "2021"
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
 publish = false
 description = "Era runtime"
 
@@ -11,6 +13,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # External
+finality-grandpa = { workspace = true, optional = true }
 codec       = { workspace = true }
 scale-info  = { workspace = true }
 serde       = { workspace = true }
@@ -32,6 +35,9 @@ sp-timestamp.workspace = true
 sp-staking.workspace = true
 sp-transaction-pool = { workspace = true, default-features = false }
 sp-genesis-builder = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-v1.19.1", default-features = false }
+
+# Required final V14 AMM integration; candidate parameters remain separately reviewed.
+era-v14-amm = { path = "../pallets/era-v14-amm", default-features = false }
 
 # FRAME + pallets
 frame-support    = { workspace = true, default-features = false }
@@ -61,9 +67,15 @@ pallet-transaction-payment-rpc-runtime-api = { git = "https://github.com/parityt
 pallet-authorship = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false }
 pallet-ai-predictions = { path = "../pallets/ai-predictions", default-features = false }
 pallet-reward-reserve = { workspace = true, default-features = false }
+pallet-security-budget = { workspace = true, default-features = false }
+era-validator-security = { path = "../pallets/validator-security", default-features = false }
+era-v14-custody-governance = { path = "../pallets/custody-governance", default-features = false }
+era-v14-application-primitives = { path = "../pallets/era-v14-application-primitives", default-features = false }
 sp-storage = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1", default-features = false, optional = true }
 
 [dev-dependencies]
+era-v14-amm = { path = "../pallets/era-v14-amm", features = ["test-fixtures"] }
+finality-grandpa = { workspace = true, features = ["std"] }
 frame-metadata = { version = "23.0.0", features = ["current"] }
 
 [build-dependencies]
@@ -72,7 +84,7 @@ substrate-wasm-builder = { workspace = true }
 [features]
 default = ["std"]
 std = [
-    "codec/std","scale-info/std","serde/std","serde_json/std",
+    "codec/std","scale-info/std","serde/std","serde_json/std","finality-grandpa?/std",
     "sp-api/std","sp-core/std","sp-io/std","sp-runtime/std","sp-version/std",
     "sp-session/std","sp-staking/std","sp-inherents/std","sp-block-builder/std",
     "sp-offchain/std","sp-timestamp/std","sp-consensus-babe/std","sp-consensus-grandpa/std",
@@ -80,15 +92,16 @@ std = [
     "pallet-timestamp/std","pallet-balances/std","pallet-transaction-payment/std","pallet-sudo/std",
     "pallet-session/std","pallet-babe/std","pallet-grandpa/std","pallet-staking/std","pallet-vesting/std",
     "pallet-multisig/std","pallet-proxy/std","pallet-assets/std","pallet-nfts/std","pallet-era-worlds/std",
-     "sp-transaction-pool/std","pallet-transaction-payment-rpc-runtime-api/std","sp-genesis-builder/std","pallet-authorship/std","pallet-ai-predictions/std","pallet-reward-reserve/std",
+     "sp-transaction-pool/std","pallet-transaction-payment-rpc-runtime-api/std","sp-genesis-builder/std","pallet-authorship/std","pallet-ai-predictions/std","pallet-reward-reserve/std","pallet-security-budget/std",
+    "era-v14-amm/std","era-validator-security/std","era-v14-custody-governance/std","era-v14-application-primitives/std",
 ]
 
 runtime-benchmarks = [
-    "frame-benchmarking/runtime-benchmarks", "frame-system-benchmarking/runtime-benchmarks",
+    "finality-grandpa", "frame-benchmarking/runtime-benchmarks", "frame-system-benchmarking/runtime-benchmarks",
     "frame-support/runtime-benchmarks", "frame-system/runtime-benchmarks",
-    "pallet-ai-predictions/runtime-benchmarks", "pallet-reward-reserve/runtime-benchmarks", "pallet-staking/runtime-benchmarks", "pallet-multisig/runtime-benchmarks", "pallet-proxy/runtime-benchmarks", "pallet-assets/runtime-benchmarks", "pallet-nfts/runtime-benchmarks", "pallet-era-worlds/runtime-benchmarks", "sp-runtime/runtime-benchmarks", "sp-storage"
+    "era-validator-security/runtime-benchmarks", "era-v14-custody-governance/runtime-benchmarks", "pallet-ai-predictions/runtime-benchmarks", "pallet-reward-reserve/runtime-benchmarks", "pallet-security-budget/runtime-benchmarks", "pallet-staking/runtime-benchmarks", "pallet-multisig/runtime-benchmarks", "pallet-proxy/runtime-benchmarks", "pallet-nfts/runtime-benchmarks", "pallet-era-worlds/runtime-benchmarks", "sp-runtime/runtime-benchmarks", "sp-storage"
 ]
-try-runtime = ["frame-try-runtime/try-runtime", "frame-support/try-runtime", "frame-executive/try-runtime", "frame-system/try-runtime", "pallet-ai-predictions/try-runtime", "pallet-reward-reserve/try-runtime", "pallet-staking/try-runtime", "pallet-multisig/try-runtime", "pallet-proxy/try-runtime", "pallet-assets/try-runtime", "pallet-nfts/try-runtime", "pallet-era-worlds/try-runtime", "sp-runtime/try-runtime"]
+try-runtime = ["frame-try-runtime/try-runtime", "frame-support/try-runtime", "frame-executive/try-runtime", "frame-system/try-runtime", "pallet-ai-predictions/try-runtime", "pallet-reward-reserve/try-runtime", "pallet-security-budget/try-runtime", "pallet-staking/try-runtime", "pallet-multisig/try-runtime", "pallet-proxy/try-runtime", "pallet-assets/try-runtime", "pallet-nfts/try-runtime", "pallet-era-worlds/try-runtime", "era-validator-security/try-runtime", "era-v14-custody-governance/try-runtime", "sp-runtime/try-runtime"]
 
 metadata-hash = ["substrate-wasm-builder/metadata-hash"]
 on-chain-release-build = ["metadata-hash", "sp-api/disable-logging"]

@@ -1,0 +1,23 @@
+{
+  "package": "serde_with",
+  "locked_version": "3.15.1",
+  "advisory": "GHSA-7gcf-g7xr-8hxj",
+  "upstream_fixed_version": "3.21.0",
+  "fixed_archive_sha256_from_retained_assessment": "76a5c54c7310e7b8b9577c286d7e399ddd876c3e12b3ed917a8aabc4b96e9e8c",
+  "advisory_url": "https://github.com/advisories/GHSA-7gcf-g7xr-8hxj",
+  "changed_files": [
+    {
+      "path": "src/key_value_map.rs",
+      "original_sha256": "8f3d84449386efacd172f354c56804a59fe30855407a771144f03952f5f18314",
+      "local_sha256": "d411527f7b0968b54903110926ac7427187a4ab2cc30b015b8634ca1b1920dda"
+    },
+    {
+      "path": "src/utils.rs",
+      "original_sha256": "95ac4576b44e65afa28dfda7ab3ae61d41e305f637d40aacd900f38fa5f09312",
+      "local_sha256": "d1e104bdb34b8c620febf6981867833a9828a1de330af272ca4046c8deedd269"
+    }
+  ],
+  "method": "Narrow local backport, not an upstream version update",
+  "github_alert_resolved": false,
+  "production_changed": false
+}

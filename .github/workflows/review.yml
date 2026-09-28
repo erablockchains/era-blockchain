@@ -1,0 +1,65 @@
+name: Isolated source review
+on:
+  workflow_dispatch:
+    inputs:
+      rust_validation:
+        description: Run bounded native tests, lint and release build on an isolated hosted runner
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: source-review-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  bindings:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - run: python3 scripts/check-publication.py
+  rust:
+    if: ${{ inputs.rust_validation }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CARGO_BUILD_JOBS: '2'
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_RELEASE_OPT_LEVEL: '2'
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '16'
+      CARGO_PROFILE_RELEASE_LTO: 'false'
+      WASM_BUILD_STD: '1'
+      CC: clang
+      CXX: clang++
+      LIBCLANG_PATH: /usr/lib/llvm-18/lib
+      PROTOC: /usr/bin/protoc
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Dependencies on disposable hosted runner only
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18 libclang-18-dev llvm-18-dev cmake pkg-config libssl-dev protobuf-compiler
+          rustup toolchain install 1.87.0 --profile minimal --component rust-src,rustfmt,clippy --target wasm32-unknown-unknown
+      - name: Format report (known historical source formatting differences)
+        continue-on-error: true
+        run: cargo +1.87.0 fmt --all -- --check
+      - name: Native regression and fresh-genesis tests
+        run: |
+          export WASM_BUILD_WORKSPACE_HINT="$GITHUB_WORKSPACE"
+          cargo +1.87.0 test --locked -p era-runtime --lib --test fresh_genesis --test principal_first --jobs 2
+          cargo +1.87.0 test --locked -p era-security-backport-smoke --jobs 2
+      - name: Lint (new warnings are review evidence, not deployment approval)
+        run: cargo +1.87.0 clippy --locked -p era-node -p era-runtime --all-targets --jobs 2
+      - name: Build source candidate
+        run: |
+          export WASM_BUILD_WORKSPACE_HINT="$GITHUB_WORKSPACE"
+          cargo +1.87.0 build --locked --release -p era-node --bin era-node --jobs 2
+# No pull_request_target, self-hosted runner, secrets, SSH, deployment, release upload or artifact publishing.
+# Manual Rust job execution and memory availability have not been validated by local preparation.

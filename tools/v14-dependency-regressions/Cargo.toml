@@ -1,0 +1,24 @@
+[workspace]
+[package]
+name = "era-v14-dependency-regressions"
+version = "0.1.0"
+edition = "2021"
+publish = false
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_with = { path = "../../vendor/serde_with-3.15.1-security", default-features = false, features = ["alloc", "macros", "hex"] }
+libp2p-quic = { path = "../../vendor/libp2p-quic-0.11.1-security", features = ["tokio"] }
+libp2p-identity = { version = "0.2.9", features = ["ed25519", "rand"] }
+libp2p-tls = "0.5.0"
+quinn = { version = "0.11.2", default-features = false, features = ["rustls", "futures-io"] }
+futures = "0.3"
+futures-timer = "3.0"
+sc-network-types = { git = "https://github.com/paritytech/polkadot-sdk", tag = "polkadot-v1.19.1" }
+
+[patch.crates-io]
+serde_with = { path = "../../vendor/serde_with-3.15.1-security" }
+libp2p-quic = { path = "../../vendor/libp2p-quic-0.11.1-security" }
+time = { path = "../../vendor/time-0.3.44-security" }
+hickory-proto-024 = { package = "hickory-proto", path = "../../vendor/hickory-proto-0.24.4" }
+hickory-proto-025 = { package = "hickory-proto", path = "../../vendor/hickory-proto-0.25.2" }

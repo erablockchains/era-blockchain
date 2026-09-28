@@ -1,0 +1,8 @@
+# ERA V14 wallet — local release candidate
+
+This SDK wallet is a local integration sample; it is not the native Windows/Android ERA Wallet and is not a public deployment. The production metadata endpoint is deployed and exact approved-object retrieval passed, while this sample's public origin and release packaging remain unapproved. Existing AMM and AI forms/code are retained for deferred V15 engineering, not commissioned V14 services. Treasury grants remain disabled.
+
+Consensus rewards use **SecurityBudget.claim_reward_page(era, historical validator, page)**, not standard Staking.payout_stakers and not AI staking. The reward form enters the fee-preview, extension-signing and finalized-receipt workflow. The caller pays the transaction fee; recipients and shares come from historical runtime exposure/commission and cannot be selected in the form. Select a completed, unexpired, eligible and unclaimed page from verified chain state. A production claim is freshly bound read-only but remains unsigned behind the ordered commissioning gates. A finalized successful claim must be reconciled to transfer/reward events, recipient balances, paid/liability accounting, issuance and allowance before being called paid. Unknown submission outcomes require reconciliation, not resubmission.
+
+NFT retrieval uses finalized versioned API references, unchanged approved `ipfs://` CIDs, an explicitly bound HTTPS origin and byte/hash validation. Content renders as text. There is no arbitrary gateway fallback. Production HTTPS, certificate, exact retrieval, rejection and recovery checks passed; independent endpoint qualification, renewal persistence and any public wallet origin remain separate gates.
+

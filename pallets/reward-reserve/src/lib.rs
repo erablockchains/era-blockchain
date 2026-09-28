@@ -15,6 +15,8 @@ pub mod weights;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
+#[cfg(feature = "try-runtime")]
+use codec::DecodeAll;
 use codec::{Decode, Encode, MaxEncodedLen};
 use frame_support::pallet_prelude::*;
 use scale_info::TypeInfo;
@@ -204,7 +206,7 @@ pub mod pallet {
         ),
     );
 
-    const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
+    const STORAGE_VERSION: StorageVersion = StorageVersion::new(3);
 
     #[pallet::pallet]
     #[pallet::storage_version(STORAGE_VERSION)]
@@ -464,6 +466,16 @@ pub mod pallet {
     #[pallet::getter(fn allocation_paused)]
     pub type AllocationPaused<T> = StorageValue<_, bool, ValueQuery>;
 
+    /// V14 permanently stops new legacy budgets and fee inflows while preserving valid claims.
+    #[pallet::storage]
+    #[pallet::getter(fn legacy_claim_only)]
+    pub type LegacyClaimOnly<T> = StorageValue<_, bool, ValueQuery>;
+
+    /// Last era that may contain a legacy reward budget.
+    #[pallet::storage]
+    #[pallet::getter(fn v14_legacy_cutoff_era)]
+    pub type V14LegacyCutoffEra<T> = StorageValue<_, EraIndex, OptionQuery>;
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
@@ -614,6 +626,9 @@ pub mod pallet {
             era: EraIndex,
             amount: BalanceOf<T>,
         },
+        LegacyClaimOnlyEntered {
+            cutoff_era: EraIndex,
+        },
     }
 
     #[pallet::error]
@@ -658,6 +673,7 @@ pub mod pallet {
         TreasurySpendFailed,
         InvalidTreasuryBeneficiary,
         ZeroAmount,
+        LegacyClaimOnly,
     }
 
     #[pallet::hooks]
@@ -666,10 +682,6 @@ pub mod pallet {
             assert!(
                 T::MillisecondsPerYear::get() > 0,
                 "reward budget year must be nonzero"
-            );
-            assert!(
-                !T::InitialRewardReserve::get().is_zero(),
-                "initial reward reserve must be nonzero"
             );
             let minimum = <T as pallet_staking::Config>::Currency::minimum_balance();
             assert!(
@@ -709,7 +721,9 @@ pub mod pallet {
         }
 
         fn on_initialize(_block: BlockNumberFor<T>) -> Weight {
-            Self::observe_pot_funding();
+            if !LegacyClaimOnly::<T>::get() {
+                Self::observe_pot_funding();
+            }
             if RewardSystemActive::<T>::get() {
                 if Self::pot_balance() < Self::reward_pot_floor() {
                     AllocationPaused::<T>::put(true);
@@ -724,7 +738,9 @@ pub mod pallet {
                         required: Self::treasury_pot_floor(),
                     });
                 }
-                Self::observe_era_transition();
+                if !LegacyClaimOnly::<T>::get() {
+                    Self::observe_era_transition();
+                }
                 if let Some(active) = pallet_staking::ActiveEra::<T>::get() {
                     Self::expire_one_era(active.index);
                 }
@@ -735,6 +751,13 @@ pub mod pallet {
         fn on_runtime_upgrade() -> Weight {
             let on_chain = StorageVersion::get::<Pallet<T>>();
             if on_chain >= STORAGE_VERSION {
+                return T::DbWeight::get().reads(1);
+            }
+
+            // Storage version 2 is upgraded only by the coordinated V13->V14 migration. That
+            // migration also verifies the 20M balance/liability domain, pins the new V14 pot,
+            // and sets the validator minimum atomically. Never advance this pallet alone.
+            if on_chain == StorageVersion::new(2) {
                 return T::DbWeight::get().reads(1);
             }
 
@@ -804,12 +827,19 @@ pub mod pallet {
 
         #[cfg(feature = "try-runtime")]
         fn pre_upgrade() -> Result<Vec<u8>, sp_runtime::TryRuntimeError> {
-            let version = StorageVersion::get::<Pallet<T>>();
+            let version_key = StorageVersion::storage_key::<Pallet<T>>();
+            let version = match frame_support::storage::unhashed::get_raw(&version_key) {
+                None => StorageVersion::new(0),
+                Some(bytes) if bytes.len() <= 2 => StorageVersion::decode_all(&mut &bytes[..])
+                    .map_err(|_| "malformed reward reserve storage version")?,
+                Some(_) => return Err("oversized reward reserve storage version".into()),
+            };
             if version != StorageVersion::new(0)
                 && version != StorageVersion::new(1)
+                && version != StorageVersion::new(2)
                 && version != STORAGE_VERSION
             {
-                return Err("reward reserve expects storage version 0, 1, or 2".into());
+                return Err("reward reserve expects storage version 0, 1, 2, or 3".into());
             }
             let reward = Self::reward_pot_account();
             let treasury = Self::ecosystem_treasury_account();
@@ -862,7 +892,7 @@ pub mod pallet {
             ): PostUpgradeState<T> =
                 Decode::decode(&mut &state[..]).map_err(|_| "invalid reward reserve pre-state")?;
             if StorageVersion::get::<Pallet<T>>() != STORAGE_VERSION {
-                return Err("reward reserve storage version is not 2".into());
+                return Err("reward reserve storage version is not 3".into());
             }
             if <pallet_staking::Pallet<T> as frame_support::traits::GetStorageVersion>::on_chain_storage_version()
                 != staking_version
@@ -993,6 +1023,7 @@ pub mod pallet {
         #[pallet::weight(T::RewardWeightInfo::sync_reward_pot())]
         pub fn sync_reward_pot(origin: OriginFor<T>) -> DispatchResult {
             let _caller = ensure_signed(origin)?;
+            ensure!(!LegacyClaimOnly::<T>::get(), Error::<T>::LegacyClaimOnly);
             ensure!(Self::observe_pot_funding(), Error::<T>::NoFundingIncrease);
             Ok(())
         }
@@ -1005,6 +1036,7 @@ pub mod pallet {
             new: FeeRoutingConfiguration,
         ) -> DispatchResult {
             ensure_root(origin)?;
+            ensure!(!LegacyClaimOnly::<T>::get(), Error::<T>::LegacyClaimOnly);
             ensure!(
                 Self::valid_fee_routing_configuration(&new),
                 Error::<T>::InvalidFeeRoutingConfiguration
@@ -1067,6 +1099,7 @@ pub mod pallet {
         #[pallet::weight(T::RewardWeightInfo::activate_rewards_and_fee_routing())]
         pub fn activate_rewards_and_fee_routing(origin: OriginFor<T>) -> DispatchResult {
             ensure_root(origin)?;
+            ensure!(!LegacyClaimOnly::<T>::get(), Error::<T>::LegacyClaimOnly);
             let (active_era, active_start) = match Self::validate_activation() {
                 Ok(value) => value,
                 Err((reason, error)) => {
@@ -1465,6 +1498,7 @@ pub mod pallet {
 
         /// Record a corrected normal fee already held by the keyless Fee Collection Pot.
         pub fn stage_normal_fee(normal_fee: BalanceOf<T>) -> DispatchResult {
+            ensure!(!LegacyClaimOnly::<T>::get(), Error::<T>::LegacyClaimOnly);
             ensure!(
                 FeeRoutingActive::<T>::get(),
                 Error::<T>::FeeRoutingUnavailable
@@ -1579,6 +1613,7 @@ pub mod pallet {
 
         /// Record a tip already held by the Fee Collection Pot.
         pub fn stage_author_tip(author: Option<T::AccountId>, tip: BalanceOf<T>) -> DispatchResult {
+            ensure!(!LegacyClaimOnly::<T>::get(), Error::<T>::LegacyClaimOnly);
             if tip.is_zero() {
                 return Ok(());
             }
@@ -1686,6 +1721,7 @@ pub mod pallet {
             duration_millis: u64,
             era_end_millis: u64,
         ) -> DispatchResult {
+            ensure!(!LegacyClaimOnly::<T>::get(), Error::<T>::LegacyClaimOnly);
             ensure!(
                 !EraRewardBudgets::<T>::contains_key(era),
                 Error::<T>::EraAlreadyFinalized
@@ -2234,6 +2270,24 @@ pub mod pallet {
                 tip,
                 reason,
             });
+        }
+
+        /// Enter the irreversible-in-V14 legacy claim-only state. The coordinated V14 activation
+        /// calls this inside its own storage transaction after proving that no legacy routing
+        /// obligation remains. Existing budgets, liabilities, claim markers and the 20M balance
+        /// are not modified.
+        pub fn enter_v14_claim_only(cutoff_era: EraIndex) -> DispatchResult {
+            ensure!(!LegacyClaimOnly::<T>::get(), Error::<T>::LegacyClaimOnly);
+            ensure!(
+                Self::pending_collection_obligations().is_zero(),
+                Error::<T>::PendingRoutingInconsistent
+            );
+            LegacyClaimOnly::<T>::put(true);
+            V14LegacyCutoffEra::<T>::put(cutoff_era);
+            FeeRoutingActive::<T>::put(false);
+            AllocationPaused::<T>::put(true);
+            Self::deposit_event(Event::LegacyClaimOnlyEntered { cutoff_era });
+            Ok(())
         }
     }
 }

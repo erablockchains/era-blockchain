@@ -2,8 +2,8 @@
 //!
 //! Real-account candidate data is confined to `cfg(test)` fixtures for reversible validation. The
 //! module contains only generic monetary constants and pure helpers. Persistent lifetime-allowance
-//! storage, migration gating and controlled issuance live in `crate::issuance_cap`; custody creation
-//! and the account-specific reconciliation vector remain outside this module.
+//! storage, migration gating and controlled issuance live in `crate::issuance_cap`; active custody
+//! creation and the account-specific reconciliation vector remain outside this policy-only module.
 
 use crate::{Balance, BlockNumber};
 

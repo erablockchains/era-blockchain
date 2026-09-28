@@ -1,0 +1,19 @@
+ERA Blockchain
+
+Original ERA-authored code is licensed under the Apache License, Version 2.0. This NOTICE does not
+relicense copied, modified, generated, or third-party components.
+
+This product includes software from the Polkadot SDK at revision
+f3969c7ddd34985e6e709ed458bcc519f651682a. Individual SDK components retain their own Apache-2.0,
+GPL, and other declared terms.
+
+This product includes locally security-patched source from alloy-dyn-abi, Hickory DNS, ruint, and
+time. Exact base archives, fixed-source provenance, modified files, licenses, and regression scope
+are recorded in each vendor/PROVENANCE.md file.
+
+Required upstream attribution and notice material, including cfg_aliases, Moka, ring/BoringSSL,
+OpenSSL, SSLeay, and fiat-crypto material, is preserved through THIRD_PARTY_NOTICES.md and the
+checksum-addressed license bundle generated from THIRD_PARTY_LICENSES.tsv.
+
+No legal approval, trademark permission, publication authority, deployment authority, or
+whole-tree single-license claim is made by this notice.

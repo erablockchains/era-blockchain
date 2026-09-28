@@ -15,6 +15,40 @@ pub fn run() -> Result<(), Box<CliError>> {
 
     let result: sc_cli::Result<()> = match &app.subcommand {
         // ---- supported subcommands ----
+        Some(cli::Subcommand::OfflineScenario {input,output}) => {
+            let result=crate::offline_scenario::run(input,output).map_err(CliError::Input)?;
+            println!("{}",serde_json::to_string_pretty(&result).map_err(|e|CliError::Input(e.to_string()))?);Ok(())
+        }
+        Some(cli::Subcommand::UpgradeCheck {snapshot,wasm,genesis}) => {
+            let result=crate::upgrade_check::run(snapshot,wasm,*genesis).map_err(CliError::Input)?;
+            println!("{}",serde_json::to_string_pretty(&result).map_err(|e|CliError::Input(e.to_string()))?);Ok(())
+        }
+        Some(cli::Subcommand::FreshCheck { blocks }) => {
+            let result=crate::fresh_check::run(*blocks).map_err(CliError::Input)?;
+            println!("{}",serde_json::to_string_pretty(&result).map_err(|e|CliError::Input(e.to_string()))?);
+            Ok(())
+        }
+        Some(cli::Subcommand::FreshClaim { genesis, validator }) => {
+            println!("{}",crate::fresh_check::synthetic_claim(*genesis,validator.clone()).map_err(CliError::Input)?);
+            Ok(())
+        }
+        Some(cli::Subcommand::FreshSpec(cmd)) => {
+            let inputs = if cmd.synthetic {
+                era_runtime::fresh_genesis_inputs::Inputs::synthetic()
+            } else {
+                let bytes = std::fs::read(cmd.inputs.as_ref().expect("clap requires public input path")).map_err(CliError::from)?;
+                serde_json::from_slice(&bytes).map_err(|e|CliError::Input(e.to_string()))?
+            };
+            if cmd.allocations {
+                let rows=inputs.allocations().map_err(CliError::Input)?;
+                println!("{}",serde_json::to_string_pretty(&rows).map_err(|e|CliError::Input(e.to_string()))?);
+            } else {
+                let spec=crate::chain_spec::fresh_spec(&inputs).map_err(CliError::Input)?;
+                println!("{}",sc_service::ChainSpec::as_json(&spec,true).map_err(CliError::Input)?);
+            }
+            Ok(())
+        }
+
         Some(cli::Subcommand::Key(cmd)) => cmd.run(&app),
 
         Some(cli::Subcommand::BuildSpec(cmd)) => {
@@ -33,15 +67,53 @@ pub fn run() -> Result<(), Box<CliError>> {
             runner.sync_run(|config| cmd.run(config.database))
         }
 
-        // ---- not wired yet (needs import-queue/client plumbing) ----
-        Some(cli::Subcommand::CheckBlock(_))
-        | Some(cli::Subcommand::ExportBlocks(_))
-        | Some(cli::Subcommand::ExportState(_))
-        | Some(cli::Subcommand::ImportBlocks(_))
-        | Some(cli::Subcommand::Revert(_)) => Err(CliError::Input(
-            "Subcommand not wired in this node build (no import-queue/client). Use: build-spec / purge-chain / run / key / chain-info."
-                .into(),
-        )),
+        Some(cli::Subcommand::CheckBlock(cmd)) => {
+            let runner=app.create_runner(cmd)?;
+            runner.async_run(|config| {
+                let p=service::new_partial(&config).map_err(|e| *e)?;
+                service::verify_maintenance_genesis(&config,&p.client).map_err(|e| *e)?;
+                let queue=service::maintenance_import_queue(&config,p.client.clone(),p.select_chain,p.transaction_pool,&p.task_manager).map_err(|e| *e)?;
+                Ok((cmd.run(p.client,queue),p.task_manager))
+            })
+        }
+        Some(cli::Subcommand::ImportBlocks(cmd)) => {
+            let runner=app.create_runner(cmd)?;
+            runner.async_run(|config| {
+                let p=service::new_partial(&config).map_err(|e| *e)?;
+                service::verify_maintenance_genesis(&config,&p.client).map_err(|e| *e)?;
+                let queue=service::maintenance_import_queue(&config,p.client.clone(),p.select_chain,p.transaction_pool,&p.task_manager).map_err(|e| *e)?;
+                Ok((cmd.run(p.client,queue),p.task_manager))
+            })
+        }
+        Some(cli::Subcommand::ExportBlocks(cmd)) => {
+            let runner=app.create_runner(cmd)?;
+            runner.async_run(|config| {
+                let p=service::new_partial(&config).map_err(|e| *e)?;
+                service::verify_maintenance_genesis(&config,&p.client).map_err(|e| *e)?;
+                Ok((cmd.run(p.client,config.database),p.task_manager))
+            })
+        }
+        Some(cli::Subcommand::ExportState(cmd)) => {
+            let runner=app.create_runner(cmd)?;
+            runner.async_run(|config| {
+                let p=service::new_partial(&config).map_err(|e| *e)?;
+                service::verify_maintenance_genesis(&config,&p.client).map_err(|e| *e)?;
+                Ok((cmd.run(p.client,config.chain_spec),p.task_manager))
+            })
+        }
+        Some(cli::Subcommand::Revert(cmd)) => {
+            let runner=app.create_runner(cmd)?;
+            runner.async_run(|config| {
+                let p=service::new_partial(&config).map_err(|e| *e)?;
+                service::verify_maintenance_genesis(&config,&p.client).map_err(|e| *e)?;
+                let aux=Box::new(|client: std::sync::Arc<service::FullClient>,backend,blocks| {
+                    sc_consensus_babe::revert(client.clone(),backend,blocks)?;
+                    sc_consensus_grandpa::revert(client,blocks)?;
+                    Ok(())
+                });
+                Ok((cmd.run(p.client,p.backend,Some(aux)),p.task_manager))
+            })
+        }
 
         #[cfg(feature = "runtime-benchmarks")]
         Some(cli::Subcommand::Benchmark(cmd)) => {

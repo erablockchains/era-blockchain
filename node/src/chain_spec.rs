@@ -77,16 +77,12 @@ fn add_balance(map: &mut BTreeMap<AccountId, Balance>, who: AccountId, amount: B
 // ---------- public constructors ----------
 
 pub fn development_config() -> ChainSpec {
-    build_spec(true)
+    build_development_spec()
 }
 
-pub fn era_prod_config() -> ChainSpec {
-    build_spec(false)
-}
-
-fn build_spec(is_dev: bool) -> ChainSpec {
-    // 1) Build typed genesis config in-Rust.
-    let full: GenesisConfig = runtime_genesis(is_dev);
+fn build_development_spec() -> ChainSpec {
+    // 1) Build the development-only typed genesis config in Rust.
+    let full: GenesisConfig = runtime_genesis();
 
     // 2) Turn it into raw storage (top + children_default).
     let mut storage = full
@@ -103,17 +99,14 @@ fn build_spec(is_dev: bool) -> ChainSpec {
     );
     storage.top.insert(b":code".to_vec(), wasm.to_vec());
 
-    // 4) Convert storage maps into hex-keyed JSON for a RAW chainspec:
+    // 4) Convert storage maps into hex-keyed JSON for a RAW chainspec.
     let top_hex = map_to_hex_json(storage.top);
     let children_default_json = children_to_hex_json(storage.children_default);
 
-    let name = if is_dev { "era-dev" } else { "era-prod" };
-    let id = name;
-
     let spec = json!({
-        "name": name,
-        "id": id,
-        "chainType": if is_dev { "Development" } else { "Live" },
+        "name": "era-dev",
+        "id": "era-dev",
+        "chainType": "Development",
         "bootNodes": [],
         "telemetryEndpoints": null,
         "protocolId": null,
@@ -172,131 +165,66 @@ fn authority(seed: &str) -> (AccountId, sr25519::Public, ed25519::Public) {
     (account_id(seed), sr25519_pub(seed), ed25519_pub(seed))
 }
 
-fn runtime_genesis(is_dev: bool) -> GenesisConfig {
-    let (val1_acc, val1_babe, val1_grandpa) = if is_dev {
-        authority("Alice")
-    } else {
-        authority("EraOne")
-    };
-    let maybe_val2 = if is_dev {
-        None
-    } else {
-        Some(authority("EraTwo"))
-    };
+fn runtime_genesis() -> GenesisConfig {
+    let (validator, babe, grandpa) = authority("Alice");
+    let sudo = account_id("Alice");
 
-    let sudo_acc = if is_dev {
-        account_id("Alice")
-    } else {
-        account_id("Sudo")
-    };
-
-    let presale = account_id("Presale");
-    let ecosystem = account_id("Ecosystem");
-    let airdrop = account_id("Airdrop");
-    let liquidity = account_id("Liquidity");
-
-    let v1 = account_id("Vester1");
-    let v2 = account_id("Vester2");
-    let v3 = account_id("Vester3");
-    let v4 = account_id("Vester4");
-    let v5 = account_id("Vester5");
-
-    // --- balances (deduped so no panics) ---
+    // Preserve the existing development genesis balances exactly. Duplicate roles are merged.
     let mut balances_map: BTreeMap<AccountId, Balance> = BTreeMap::new();
-
-    if is_dev {
-        add_balance(&mut balances_map, account_id("Alice"), 1_000_000 * DECIMALS);
-        add_balance(&mut balances_map, account_id("Bob"), 1_000_000 * DECIMALS);
-    } else {
-        add_balance(&mut balances_map, presale.clone(), 200_000_000 * DECIMALS);
-        add_balance(&mut balances_map, ecosystem.clone(), 150_000_000 * DECIMALS);
-        add_balance(&mut balances_map, airdrop.clone(), 300_000_000 * DECIMALS);
-        add_balance(&mut balances_map, liquidity.clone(), 150_000_000 * DECIMALS);
-
-        add_balance(&mut balances_map, v1.clone(), 80_000_000 * DECIMALS);
-        add_balance(&mut balances_map, v2.clone(), 30_000_000 * DECIMALS);
-        add_balance(&mut balances_map, v3.clone(), 30_000_000 * DECIMALS);
-        add_balance(&mut balances_map, v4.clone(), 30_000_000 * DECIMALS);
-        add_balance(&mut balances_map, v5.clone(), 30_000_000 * DECIMALS);
-    }
-
-    // Always fund sudo + validators (merges if present already)
-    add_balance(&mut balances_map, sudo_acc.clone(), 1_000_000 * DECIMALS);
-    add_balance(&mut balances_map, val1_acc.clone(), 1_000_000 * DECIMALS);
-    if let Some((val2_acc, _, _)) = maybe_val2.as_ref() {
-        add_balance(&mut balances_map, val2_acc.clone(), 1_000_000 * DECIMALS);
-    }
-
+    add_balance(&mut balances_map, account_id("Alice"), 1_000_000 * DECIMALS);
+    add_balance(&mut balances_map, account_id("Bob"), 1_000_000 * DECIMALS);
+    add_balance(&mut balances_map, sudo.clone(), 1_000_000 * DECIMALS);
+    add_balance(&mut balances_map, validator.clone(), 1_000_000 * DECIMALS);
     let balances: Vec<(AccountId, Balance)> = balances_map.into_iter().collect();
 
-    // --- session keys ---
-    let mut session = vec![(
-        val1_acc.clone(),
-        val1_acc.clone(),
-        session_keys(val1_babe, val1_grandpa),
+    let session = vec![(
+        validator.clone(),
+        validator.clone(),
+        session_keys(babe, grandpa),
     )];
 
-    if let Some((val2_acc, val2_babe, val2_grandpa)) = maybe_val2.as_ref() {
-        session.push((
-            val2_acc.clone(),
-            val2_acc.clone(),
-            session_keys(*val2_babe, *val2_grandpa),
-        ));
-    }
-
-    // --- staking genesis ---
-    // Make Alice validator for dev. Staking is SessionManager, so this seeds session 0.
-    let staking_cfg: StakingConfig = if is_dev {
-        let stash = val1_acc.clone();
-        let controller = val1_acc.clone();
-        let bond: Balance = 100_000 * DECIMALS;
-
-        StakingConfig {
-            validator_count: 1,
-            minimum_validator_count: 1,
-            invulnerables: vec![stash.clone()],
-            stakers: vec![(
-                stash.clone(),
-                controller.clone(),
-                bond,
-                StakerStatus::Validator,
-            )],
-            ..Default::default()
-        }
-    } else {
-        StakingConfig {
-            validator_count: 2,
-            minimum_validator_count: 1,
-            ..Default::default()
-        }
+    // Staking is SessionManager, so this seeds development session 0.
+    let bond: Balance = 100_000 * DECIMALS;
+    let staking = StakingConfig {
+        validator_count: 1,
+        minimum_validator_count: 1,
+        invulnerables: vec![validator.clone()],
+        stakers: vec![(validator.clone(), validator, bond, StakerStatus::Validator)],
+        ..Default::default()
     };
 
     GenesisConfig {
         // Wasm is injected into raw storage, not here.
         system: SystemConfig::default(),
-
         balances: BalancesConfig {
             balances,
             dev_accounts: None,
         },
-
         session: SessionConfig {
             keys: session,
             non_authority_keys: vec![],
         },
-
-        sudo: SudoConfig {
-            key: Some(sudo_acc),
-        },
-
-        staking: staking_cfg,
+        sudo: SudoConfig { key: Some(sudo) },
+        staking,
         transaction_payment: TransactionPaymentConfig::default(),
         vesting: VestingConfig { vesting: vec![] },
-
-        // GRANDPA: keep default genesis (authorities come via Session)
+        // GRANDPA authorities come via Session.
         grandpa: GrandpaConfig::default(),
-
-        // Any other pallets get their defaults:
         ..Default::default()
     }
+}
+
+/// Generate the candidate from public identities only. No database or keystore is opened.
+pub fn fresh_spec(inputs: &era_runtime::fresh_genesis_inputs::Inputs) -> Result<ChainSpec, String> {
+    let genesis=inputs.genesis()?;
+    let mut storage=genesis.build_storage()?;
+    storage.top.insert(b":code".to_vec(),era_runtime::WASM_BINARY.ok_or("fresh runtime Wasm missing")?.to_vec());
+    let id=if inputs.development {"era-v14-relaunch-dev-20260914"} else {"era-v14-20260914"};
+    let spec=json!({
+        "name":"ERA", "id":id,"chainType":if inputs.development {"Development"} else {"Live"},
+        "bootNodes":[],"telemetryEndpoints":null,"protocolId":id,
+        "properties":{"tokenSymbol":"ETKN","tokenDecimals":18,"ss58Format":42},
+        "codeSubstitutes":{},"genesis":{"raw":{"top":map_to_hex_json(storage.top),"childrenDefault":children_to_hex_json(storage.children_default)}}
+    });
+    ChainSpec::from_json_bytes(serde_json::to_vec(&spec).map_err(|e|e.to_string())?)
 }

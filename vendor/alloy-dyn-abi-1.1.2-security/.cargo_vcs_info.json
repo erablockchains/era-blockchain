@@ -1,0 +1,6 @@
+{
+  "git": {
+    "sha1": "e55993f69d91f36fdb501d54e11a8265f90e42c1"
+  },
+  "path_in_vcs": "crates/dyn-abi"
+}

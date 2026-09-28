@@ -1,0 +1,20 @@
+[
+  {
+    "path": "pallets/validator-security/src/weights.rs",
+    "original_sha256": "da9895666786746099f4ad7e1b6fa70b8d91fabefac8196ebeb9e03166c58a05",
+    "candidate_sha256": "afbc7e826f720daff0435e12c39cde68f1a64cfcda1c6ad0f0b804de905eecde",
+    "change": "Historical benchmark path/hostname redaction in comments/documentation only; executable tokens unchanged"
+  },
+  {
+    "path": "pallets/nfts/PROVENANCE.md",
+    "original_sha256": "d54ab832195e5637da3ba92c15e981ee64ffe4ee08ae5dd481513a11053d63c3",
+    "candidate_sha256": "9a1db1e9c1a7dfa8aaff71858302677b0f73a0cc7c74493cceb94a655fa435e6",
+    "change": "Historical benchmark path/hostname redaction in comments/documentation only; executable tokens unchanged"
+  },
+  {
+    "path": "pallets/custody-governance/README.md",
+    "original_sha256": "c2c5f8a282b947aa41bd5059835091d673f790e82985a8f57290e77ceb17b227",
+    "candidate_sha256": "2e41e3179108b8b6548f09f814deb972e77f27365d56dd4cf33c44f56e4d6947",
+    "change": "Replace superseded historical migration/release statements with confirmed fresh-genesis custody status; documentation only"
+  }
+]

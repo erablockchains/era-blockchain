@@ -1,0 +1,12 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { readFileSync } from "node:fs";
+import { ERA_V14_NATIVE_BINDINGS as B, assertEraV14Metadata, assertEraV14ChainContext, bytesToHex, encodeScaleCompact } from "../sdk/era-v14-native.mjs";
+const raw = readFileSync(new URL("../fixtures/deployed-metadata.scale",import.meta.url));
+const metadataHex = bytesToHex(raw);
+const genesisHash = "0x0abc2c3d8db5815541050b73da4d81267ebf14d90dbee8d7258155b667ea112e";
+const context = {runtimeVersion:{specVersion:14,transactionVersion:1}, metadataHex,genesisHash,expectedGenesisHash:genesisHash,signedExtensions:B.signedExtensions};
+test("retained deployed raw metadata passes real WebCrypto verification", async()=>{ await assertEraV14Metadata(metadataHex); await assertEraV14ChainContext(context); });
+test("SCALE Vec wrapped metadata is not silently treated as raw RPC metadata", async()=>{ await assert.rejects(()=>assertEraV14Metadata(bytesToHex(Buffer.concat([encodeScaleCompact(raw.length),raw]))),/metadata hash/); });
+test("same spec version with changed metadata fails closed", async()=>{ const changed=Buffer.from(raw);changed[changed.length-1]^=1; await assert.rejects(()=>assertEraV14Metadata(bytesToHex(changed)),/metadata hash/); });
+test("wrong genesis and reordered extensions fail before signing", async()=>{ await assert.rejects(()=>assertEraV14ChainContext({...context,genesisHash:`0x${"ab".repeat(32)}`}),/genesis/); await assert.rejects(()=>assertEraV14ChainContext({...context,signedExtensions:[...B.signedExtensions].reverse()}),/signed extensions/); });

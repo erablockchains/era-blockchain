@@ -1,0 +1,17 @@
+# Final sampled observation — 19 September 2026
+
+The original window **2026-09-16T18:08:16Z–2026-09-19T18:08:16Z** is complete at one-minute sampled resolution. Each of nine hosts has4,321/4,321 fresh healthy evaluations (38,889 total) covering4,320 one-minute intervals. The retained4,215 evaluations and106 additional points per host were reconciled with identical overlap; no missing/stale/unhealthy, warning or protective-pause evaluations were found.
+
+All nine hosts were continuous/running in the fresh post-cutoff check. Sampled local finality advanced across the window. All three permitted RPC routes agreed at finalized checkpoint44,636; all four approved validators had positive reward points in eras0–74. These are sampled/per-era results, not continuous all-nine checkpoint equality or individual GRANDPA-vote evidence.
+
+Public TLS HTTPS and an actual WebSocket finalized-head subscription succeeded on19September18:21 UTC, **originating on RPC1**. Both matched ERA/ETKN, spec14/transaction1 and the approved genesis in the README. HTTPS/WSS finalized heads advanced44,636→44,638; subscription notifications delivered44,638 and44,639. No independent off-fleet availability evidence was supplied.
+
+At finalized block44,636, unallocated principal was19,999,966.232480036221504247 ETKN; reserved principal and liabilities both33.767519963778495753. Their principal sum remained20M ETKN. Issuance remained100M and remaining lifetime mint allowance900M; gross annual issuance was0 against a6M ceiling. All74 completed-era budgets reconciled. Effective paid total0 uses its verified ValueQuery default. Accrual and principal conservation are demonstrated; no production payout or transaction was required or executed.
+
+Usable storage headroom remained positive after retained floors/reservations; the lowest window value was68.55GiB and minimum usable inodes exceeded28million. No sampled storage protection event or resource-pressure incident was demonstrated. Three previously identified storage-reclamation steps remain unattributed and require only narrow retained timer/journal review; no cleanup or observation restart is warranted by this evidence.
+
+**Limits:** minute evaluations do not prove uninterrupted availability. Scrapes were configured every15s and supervisors every5s; maximum evaluated scrape/supervisor/finality ages were14.628/20/45seconds. Remote process restart/stop histories and full warning transitions are incomplete; unchanged host boot times do not rule out node restarts. Continuous all-nine checkpoint/peer agreement, individual vote history and off-fleet endpoint history were not established. Prometheus retention is30days and local warning files retain100 transitions; complete journal access/retention is not certified. Accepted unknown background capacity commitments remain. Current healthy checks do not fill historical gaps, and missing evidence is not counted as zero incidents.
+
+Close the sampled-monitoring milestone and proceed with client/integration prioritization and publication review. This is not an independent audit, uninterrupted-availability certificate, full-V14-completeness claim, feature activation or publication authorization. Source validation and settled owner decisions are carried forward.
+
+The [machine-readable provenance record](../provenance/observation-20260919.json) binds this summary to the retained final report and evidence manifest. Detailed operator evidence remains outside this public source snapshot.

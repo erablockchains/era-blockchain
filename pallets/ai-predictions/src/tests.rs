@@ -1702,6 +1702,7 @@ fn phase4b_correct_outcome_refunds_reserved_stake() {
 #[test]
 fn phase4b_incorrect_outcome_slashes_reserved_stake_when_enabled() {
     new_test_ext().execute_with(|| {
+        let issuance_before = Balances::total_issuance();
         create_phase3_token();
         let token_id = 0u64;
 
@@ -1767,6 +1768,7 @@ fn phase4b_incorrect_outcome_slashes_reserved_stake_when_enabled() {
             .expect("claim must exist");
         assert_eq!(claim.refunded, 0);
         assert_eq!(claim.slashed, 100);
+        assert_eq!(Balances::total_issuance(), issuance_before, "V14 settlement must not burn ETKN");
     });
 }
 
@@ -1899,7 +1901,7 @@ fn phase4b_dispute_bond_accepted_returns_reserved_bond() {
 }
 
 #[test]
-fn phase4b_dispute_bond_rejected_slashes_reserved_bond() {
+fn phase4b_good_faith_rejected_bond_is_refunded() {
     new_test_ext().execute_with(|| {
         create_phase3_token();
         let token_id = 0u64;
@@ -1955,6 +1957,78 @@ fn phase4b_dispute_bond_rejected_slashes_reserved_bond() {
             false,
         ));
 
+        assert_eq!(Balances::reserved_balance(BOB), 0);
+        assert_eq!(Balances::free_balance(BOB), bob_free_before);
+
+        let dispute = AiPredictions::prediction_token_disputes(0).expect("dispute must exist");
+        assert!(dispute.resolved);
+        assert_eq!(dispute.accepted, Some(false));
+    });
+}
+
+#[test]
+fn phase4b_explicit_fraud_bond_is_transferred_once_without_burning() {
+    new_test_ext().execute_with(|| {
+        create_phase3_token();
+        let token_id = 0u64;
+
+        assert_ok!(AiPredictions::set_settlement_config(
+            RuntimeOrigin::root(),
+            true,
+            100,
+            25,
+        ));
+
+        assert_ok!(AiPredictions::authorize_validator(
+            RuntimeOrigin::root(),
+            ALICE
+        ));
+
+        let bob_free_before = Balances::free_balance(BOB);
+
+        assert_ok!(AiPredictions::propose_prediction_outcome(
+            RuntimeOrigin::signed(ALICE),
+            token_id,
+            SettlementOutcome::Correct,
+            b"ipfs://phase4b-proposed".to_vec(),
+        ));
+
+        assert_ok!(AiPredictions::dispute_prediction_outcome(
+            RuntimeOrigin::signed(BOB),
+            token_id,
+            DisputeReason::WrongOutcome,
+            b"ipfs://phase4b-dispute".to_vec(),
+            25,
+        ));
+
+        assert_eq!(Balances::reserved_balance(BOB), 25);
+
+        assert_ok!(AiPredictions::admin_finalize_prediction_outcome(
+            RuntimeOrigin::root(),
+            token_id,
+            SettlementOutcome::Correct,
+            b"ipfs://phase4b-final".to_vec(),
+        ));
+
+        assert_ok!(AiPredictions::set_settlement_economics_config(
+            RuntimeOrigin::root(),
+            true,
+            true,
+            true,
+        ));
+
+        let issuance=Balances::total_issuance();let treasury=Balances::free_balance(99);
+        assert_noop!(AiPredictions::adjudicate_prediction_dispute_bond(RuntimeOrigin::signed(ALICE),0,false,true,[7;32]),sp_runtime::DispatchError::BadOrigin);
+        assert_noop!(AiPredictions::adjudicate_prediction_dispute_bond(RuntimeOrigin::root(),0,true,true,[7;32]),Error::<crate::mock::Test>::InvalidBondAdjudication);
+        assert_noop!(AiPredictions::adjudicate_prediction_dispute_bond(RuntimeOrigin::root(),0,false,true,[0;32]),Error::<crate::mock::Test>::InvalidBondAdjudication);
+        assert_ok!(AiPredictions::adjudicate_prediction_dispute_bond(
+            RuntimeOrigin::root(),
+            0,
+            false, true, [7;32],
+        ));
+
+        assert_eq!(Balances::total_issuance(),issuance);assert_eq!(Balances::free_balance(99),treasury+25);
+        assert_noop!(AiPredictions::adjudicate_prediction_dispute_bond(RuntimeOrigin::root(),0,false,true,[7;32]),Error::<crate::mock::Test>::DisputeAlreadyResolved);
         assert_eq!(Balances::reserved_balance(BOB), 0);
         assert_eq!(Balances::free_balance(BOB), bob_free_before - 25);
 
@@ -2519,7 +2593,7 @@ fn phase5_incorrect_outcome_pays_no_side_winner() {
 }
 
 #[test]
-fn phase5_claim_rejected_when_no_winning_side_stake_exists() {
+fn phase5_no_winning_side_refunds_principal_once_with_conservation() {
     new_test_ext().execute_with(|| {
         create_phase3_token();
         let token_id = 0u64;
@@ -2569,10 +2643,13 @@ fn phase5_claim_rejected_when_no_winning_side_stake_exists() {
             b"ipfs://phase5b-final-correct".to_vec(),
         ));
 
-        assert_noop!(
-            AiPredictions::claim_prediction_market_payout(RuntimeOrigin::signed(BOB), token_id),
-            Error::<crate::mock::Test>::MarketNoWinningStake
-        );
+        let issuance=Balances::total_issuance();let before=Balances::free_balance(BOB);
+        assert_ok!(AiPredictions::claim_prediction_market_payout(RuntimeOrigin::signed(BOB), token_id));
+        assert_eq!(Balances::free_balance(BOB),before+50);
+        assert_eq!(Balances::total_issuance(),issuance);
+        let accounting=PredictionTokenMarketAccounting::<crate::mock::Test>::get(token_id);
+        assert_eq!(accounting.total_refunded,50);assert_eq!(accounting.total_slashed,0);
+        assert_noop!(AiPredictions::claim_prediction_market_payout(RuntimeOrigin::signed(BOB),token_id),Error::<crate::mock::Test>::MarketPayoutAlreadyClaimed);
     });
 }
 
@@ -3480,5 +3557,88 @@ fn phase6b_try_runtime_pre_and_post_checks_pass_for_v2_state() {
         let state = <AiPredictions as Hooks<u64>>::pre_upgrade().expect("pre-upgrade checks");
         AiPredictions::migrate_market_economics_config_v1_to_v2();
         <AiPredictions as Hooks<u64>>::post_upgrade(state).expect("post-upgrade checks");
+    });
+}
+
+#[test]
+fn phase4b_reserve_shortfall_rolls_back_partial_penalty_and_claim() {
+    new_test_ext().execute_with(|| {
+        let issuance_before = Balances::total_issuance();
+        create_phase3_token();
+        let token_id = 0u64;
+
+        assert_ok!(AiPredictions::set_staking_config(
+            RuntimeOrigin::root(),
+            true,
+            1,
+        ));
+
+        let bob_free_before = Balances::free_balance(BOB);
+
+        assert_ok!(AiPredictions::stake_on_prediction_token(
+            RuntimeOrigin::signed(BOB),
+            token_id,
+            100,
+        ));
+
+        assert_eq!(Balances::reserved_balance(BOB), 100);
+
+        assert_ok!(AiPredictions::set_settlement_config(
+            RuntimeOrigin::root(),
+            true,
+            1,
+            25,
+        ));
+
+        assert_ok!(AiPredictions::authorize_validator(
+            RuntimeOrigin::root(),
+            ALICE
+        ));
+
+        assert_ok!(AiPredictions::propose_prediction_outcome(
+            RuntimeOrigin::signed(ALICE),
+            token_id,
+            SettlementOutcome::Correct,
+            b"ipfs://phase4b-proposed".to_vec(),
+        ));
+
+        assert_ok!(AiPredictions::admin_finalize_prediction_outcome(
+            RuntimeOrigin::root(),
+            token_id,
+            SettlementOutcome::Incorrect,
+            b"ipfs://phase4b-final-incorrect".to_vec(),
+        ));
+
+        assert_ok!(AiPredictions::set_settlement_economics_config(
+            RuntimeOrigin::root(),
+            true,
+            true,
+            false,
+        ));
+
+        // Simulate a pre-existing reserve/accounting inconsistency. The failed claim
+        // must undo the partial repatriation as well as all claim/accounting writes.
+        assert_eq!(<Balances as frame_support::traits::ReservableCurrency<u64>>::unreserve(&BOB,20),0);
+        let before=sp_io::storage::root(sp_runtime::StateVersion::V1);
+        assert_noop!(AiPredictions::claim_prediction_token_settlement(RuntimeOrigin::signed(BOB),token_id),Error::<crate::mock::Test>::ReserveInvariant);
+        assert_eq!(sp_io::storage::root(sp_runtime::StateVersion::V1),before);
+        assert_eq!(Balances::total_issuance(),issuance_before);
+        assert_eq!(Balances::free_balance(BOB),bob_free_before-80);
+        assert_eq!(Balances::reserved_balance(BOB),80);
+    });
+}
+
+#[cfg(feature = "try-runtime")]
+#[test]
+fn unchanged_v3_upgrade_preserves_pending_governance() {
+    use frame_support::traits::{Hooks, StorageVersion};
+    new_test_ext().execute_with(|| {
+        StorageVersion::new(3).put::<AiPredictions>();
+        assert_ok!(AiPredictions::register_model(RuntimeOrigin::signed(1),vec![7;32],b"fixture://pending".to_vec()));
+        let before=ModelGovernanceById::<crate::mock::Test>::get(0).unwrap();
+        let state=<AiPredictions as Hooks<u64>>::pre_upgrade().unwrap();
+        <AiPredictions as Hooks<u64>>::on_runtime_upgrade();
+        assert_ok!(<AiPredictions as Hooks<u64>>::post_upgrade(state));
+        assert_eq!(ModelGovernanceById::<crate::mock::Test>::get(0),Some(before));
     });
 }

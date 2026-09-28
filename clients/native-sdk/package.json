@@ -1,0 +1,17 @@
+{
+  "name": "era-v14-private-review-surface",
+  "version": "0.1.0-private-review",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "scan": "sh tools/scan-review-surface.sh",
+    "check": "node --test tests/*.test.mjs && sh tools/scan-review-surface.sh"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

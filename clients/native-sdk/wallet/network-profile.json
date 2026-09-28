@@ -1,0 +1,8 @@
+{
+  "network": "development",
+  "genesisHash": "0xcd415d07bdfae8f8b22635963157d25a5be9dfa8ec99a7db336d19705bcba096",
+  "rpc": "ws://127.0.0.1:21944",
+  "specVersion": 15,
+  "transactionVersion": 1,
+  "metadataSha256": "c188b00f3589677fe7ecfa833d92d884858ad642a6d231d52696298edbe91d40"
+}

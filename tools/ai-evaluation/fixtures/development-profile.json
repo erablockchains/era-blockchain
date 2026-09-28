@@ -1,0 +1,11 @@
+{
+  "evidencePrefix": "507d4f0bb08b9e2c877acf6d401c17176ab21c55f8a233793e11faa202815ed1",
+  "financialModesAllowed": false,
+  "metadataSha256": "c188b00f3589677fe7ecfa833d92d884858ad642a6d231d52696298edbe91d40",
+  "palletIndex": 12,
+  "predictionsPrefix": "507d4f0bb08b9e2c877acf6d401c17171246348a80b043fb0c0728a6c236b6dc",
+  "requestsPrefix": "507d4f0bb08b9e2c877acf6d401c1717592718586e926e290ab416c66d9be0c8",
+  "specVersion": 15,
+  "status": "development profile; not deployed or release accepted",
+  "transactionVersion": 1
+}

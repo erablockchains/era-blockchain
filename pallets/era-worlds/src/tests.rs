@@ -53,10 +53,10 @@ impl crate::Config for Test {
     type EmergencyPauseOrigin = frame_system::EnsureSignedBy<EmergencyOperators, u64>;
     type RegistrationDeposit = RegistrationDeposit;
     type MaxWorldIdLength = ConstU32<16>;
-    type WeightInfo = ();
+    type WeightInfo = crate::weights::SubstrateWeight<Test>;
 }
 
-fn new_test_ext() -> sp_io::TestExternalities {
+pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
     let mut storage = frame_system::GenesisConfig::<Test>::default()
         .build_storage()
         .expect("system genesis builds");

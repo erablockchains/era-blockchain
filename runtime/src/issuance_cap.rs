@@ -14,6 +14,7 @@ pub mod pallet {
         traits::fungible::{Inspect, Mutate},
     };
     use frame_system::pallet_prelude::*;
+    use sp_core::U256;
     use sp_runtime::{DispatchError, RuntimeDebug};
 
     use crate::{
@@ -25,11 +26,11 @@ pub mod pallet {
 
     const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
 
-    /// Custody identities authorized immediately before the V13 runtime upgrade.
+    /// The one remaining non-custody destination authorized before the V13 runtime upgrade.
     ///
-    /// The four destinations were deliberately left symbolic in the approved reconciliation
-    /// plan. This record is the only deployment input: the runtime supplies every amount and
-    /// source account and rejects an input for a different approved-vector hash.
+    /// Founding custody destinations are compiled deterministic pallet subaccounts and therefore
+    /// cannot be supplied at deployment. Community onboarding remains a separate allocation whose
+    /// owner/control model is outside this correction.
     #[derive(
         Clone,
         Encode,
@@ -43,10 +44,7 @@ pub mod pallet {
     )]
     pub struct V13MigrationInput<AccountId> {
         pub reconciliation_vector_hash: [u8; 32],
-        pub active_presale_custody: AccountId,
-        pub ecosystem_custody: AccountId,
-        pub liquidity_custody: AccountId,
-        pub community_onboarding_custody: AccountId,
+        pub community_onboarding_destination: AccountId,
     }
 
     /// Independent proof that the ordered V13 migration committed in full.
@@ -121,6 +119,17 @@ pub mod pallet {
             amount: Balance,
             remaining_allowance: Balance,
         },
+        /// One complete V14 gross issuance was atomically split between protocol accounts.
+        GrossIssued {
+            staking_beneficiary: T::AccountId,
+            staking_amount: Balance,
+            treasury_beneficiary: T::AccountId,
+            treasury_amount: Balance,
+            gross_amount: Balance,
+            remaining_allowance: Balance,
+            carry_before: u8,
+            carry_after: u8,
+        },
     }
 
     #[pallet::error]
@@ -143,6 +152,12 @@ pub mod pallet {
         DownstreamMintFailed,
         /// The currency reported an amount or total-issuance delta other than the exact request.
         UnexpectedIssuanceDelta,
+        /// Both issuance shares must have distinct protocol destinations.
+        DestinationCollision,
+        /// The supplied split carry is outside the fixed 0..9 domain.
+        InvalidSplitCarry,
+        /// The two shares and carry transition do not encode the approved persistent 90/10 split.
+        InvalidSplitEvidence,
     }
 
     #[pallet::hooks]
@@ -173,6 +188,128 @@ pub mod pallet {
                     TransactionOutcome::Rollback(result)
                 }
             })
+        }
+
+        /// Atomically mint one complete gross issuance to the V14 staking pot and treasury.
+        ///
+        /// The allowance decrement, both balance credits, exact total-issuance delta, and event
+        /// share one transaction. Either destination may receive zero, but their checked sum must
+        /// be positive and the destinations must differ.
+        pub fn controlled_mint_split(
+            staking_beneficiary: &T::AccountId,
+            staking_amount: Balance,
+            treasury_beneficiary: &T::AccountId,
+            treasury_amount: Balance,
+            carry_before: u8,
+            carry_after: u8,
+        ) -> Result<Balance, DispatchError> {
+            with_transaction(|| {
+                let result = Self::do_controlled_mint_split(
+                    staking_beneficiary,
+                    staking_amount,
+                    treasury_beneficiary,
+                    treasury_amount,
+                    carry_before,
+                    carry_after,
+                );
+                if result.is_ok() {
+                    TransactionOutcome::Commit(result)
+                } else {
+                    TransactionOutcome::Rollback(result)
+                }
+            })
+        }
+
+        fn do_controlled_mint_split(
+            staking_beneficiary: &T::AccountId,
+            staking_amount: Balance,
+            treasury_beneficiary: &T::AccountId,
+            treasury_amount: Balance,
+            carry_before: u8,
+            carry_after: u8,
+        ) -> Result<Balance, DispatchError> {
+            ensure!(
+                staking_beneficiary != treasury_beneficiary,
+                Error::<T>::DestinationCollision
+            );
+            ensure!(
+                carry_before < 10 && carry_after < 10,
+                Error::<T>::InvalidSplitCarry
+            );
+            let gross = staking_amount
+                .checked_add(treasury_amount)
+                .ok_or(Error::<T>::ArithmeticOverflow)?;
+            ensure!(gross != 0, Error::<T>::ZeroIssuance);
+            let split_numerator = U256::from(gross)
+                .checked_mul(U256::from(9u8))
+                .and_then(|value| value.checked_add(U256::from(carry_before)))
+                .ok_or(Error::<T>::ArithmeticOverflow)?;
+            let expected_staking = (split_numerator / U256::from(10u8)).low_u128();
+            let expected_carry = (split_numerator % U256::from(10u8)).low_u32() as u8;
+            let expected_treasury = gross
+                .checked_sub(expected_staking)
+                .ok_or(Error::<T>::ArithmeticOverflow)?;
+            ensure!(
+                staking_amount == expected_staking
+                    && treasury_amount == expected_treasury
+                    && carry_after == expected_carry,
+                Error::<T>::InvalidSplitEvidence
+            );
+
+            let remaining =
+                RemainingAllowance::<T>::get().ok_or(Error::<T>::AllowanceNotInitialized)?;
+            ensure!(
+                remaining <= MAXIMUM_POST_CORRECTION_NEW_ISSUANCE,
+                Error::<T>::InvalidStoredAllowance
+            );
+            let next_remaining = remaining
+                .checked_sub(gross)
+                .ok_or(Error::<T>::AllowanceExceeded)?;
+            let issuance_before = T::Currency::total_issuance();
+            let expected_issuance = issuance_before
+                .checked_add(gross)
+                .ok_or(Error::<T>::ArithmeticOverflow)?;
+            ensure!(
+                issuance_before <= ABSOLUTE_LIFETIME_CAP,
+                Error::<T>::IssuanceAboveLifetimeCeiling
+            );
+            ensure!(
+                expected_issuance <= ABSOLUTE_LIFETIME_CAP,
+                Error::<T>::LifetimeCeilingExceeded
+            );
+
+            RemainingAllowance::<T>::put(next_remaining);
+            if staking_amount != 0 {
+                let minted = T::Currency::mint_into(staking_beneficiary, staking_amount)
+                    .map_err(|_| Error::<T>::DownstreamMintFailed)?;
+                ensure!(
+                    minted == staking_amount,
+                    Error::<T>::UnexpectedIssuanceDelta
+                );
+            }
+            if treasury_amount != 0 {
+                let minted = T::Currency::mint_into(treasury_beneficiary, treasury_amount)
+                    .map_err(|_| Error::<T>::DownstreamMintFailed)?;
+                ensure!(
+                    minted == treasury_amount,
+                    Error::<T>::UnexpectedIssuanceDelta
+                );
+            }
+            ensure!(
+                T::Currency::total_issuance() == expected_issuance,
+                Error::<T>::UnexpectedIssuanceDelta
+            );
+            Self::deposit_event(Event::GrossIssued {
+                staking_beneficiary: staking_beneficiary.clone(),
+                staking_amount,
+                treasury_beneficiary: treasury_beneficiary.clone(),
+                treasury_amount,
+                gross_amount: gross,
+                remaining_allowance: next_remaining,
+                carry_before,
+                carry_after,
+            });
+            Ok(gross)
         }
 
         fn do_controlled_mint_into(

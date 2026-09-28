@@ -1,46 +1,26 @@
-# ERA Blockchain — deployed V13 private review baseline
+# ERA Blockchain V14
 
-This private repository contains the tracked source baseline associated with the deployed
-ERA-MAINNET V13 runtime. The original source identity is commit
-`77eb28b519d2f83796e65d402a62671a8c777c83`, tree
-`1b0d6a42f1c6dbe091391474fd4b72445a5b2fdb`. The deployed compressed runtime Wasm is 997,122 bytes
-with SHA-256 `ecca5baddc60d4e8522c8ea6206fec0c29175d59ddf2359e6d43201f1faa44a2`.
+ERA is a FRAME-based blockchain with native ETKN (18 decimals, SS58 42), BABE authoring and GRANDPA finality. The production network runs the authenticated V14 runtime at specification 15 and transaction version 1.
 
-The commit in this private repository is a review/import commit. It is not represented as the
-original historical source commit. See
-[`docs/review/SOURCE_PROVENANCE.md`](docs/review/SOURCE_PROVENANCE.md) for the import record and
-[`docs/review/V13_MAINNET_BASELINE_AND_KNOWN_GAPS.md`](docs/review/V13_MAINNET_BASELINE_AND_KNOWN_GAPS.md)
-for deployed facts, staking status, known gaps, and reproducible verification instructions.
+- Public JSON-RPC: `https://eraprojects.org/`; WebSocket: `wss://eraprojects.org/`.
+- Genesis: `0x0abc2c3d8db5815541050b73da4d81267ebf14d90dbee8d7258155b667ea112e`.
+- Runtime spec name `era`, specification 15, transaction version 1.
+- Four founder-controlled validators are active. This does not establish independent or unlimited permissionless validator operation.
 
-## Review commands
+The authenticated V14 node release is accepted on all nine production hosts. The runtime upgrade finalized once at block 118480, and the deployed compressed Wasm SHA-256 is `122af167022227c46b2b74d99f5d3a73f41f8d65bb4a8a1de7b88b6e986de2af`. The corresponding metadata SHA-256 is `c188b00f3589677fe7ecfa833d92d884858ad642a6d231d52696298edbe91d40`. See [validation](docs/VALIDATION.md) and [source provenance](docs/PROVENANCE.md) for the limits of this evidence.
 
-Use the pinned Rust 1.87.0 toolchain and `Cargo.lock`. After a separately reviewed dependency fetch,
-run the checks offline:
+Native transfers, consensus staking, capped SecurityBudget accrual, founder vesting, category custody, native Assets, NFT primitives and World registry are deployed capabilities. Public NFT metadata retrieval is live over HTTPS and the four approved objects passed exact retrieval checks. Allocator initialization, production NFT mint/sale/swap commissioning, the first legitimate SecurityBudget reward payment and equivocation-penalty activation remain pending their ordered acceptance gates. Source presence is not a claim that these workflows have been commissioned.
 
-```sh
-cargo fmt --all -- --check
-cargo test --workspace --locked --offline
-cargo test -p era-runtime --features try-runtime --locked --offline
-cargo clippy --workspace --all-targets --locked --offline
-cargo build --workspace --release --locked --offline
-```
+AMM and AI predictive-tokenization/model-service commissioning remain inactive and are deferred to V15. Restrictive AI onboarding settings are installed, and runtime preservation checks passed, but this does not make AI an operational V14 service. Treasury grants remain disabled. EVM/Solidity/true ERC-20 compatibility and GPU/full World Engine functionality are outside V14.
 
-Never use production keys, node databases, chain data, or production endpoints for development or
-review. Nothing in this repository authorizes a runtime deployment, live-chain query, signed
-extrinsic, validator change, or custody action.
+The native ERA Wallet is prepared under [`erablockchains/apps`](https://github.com/erablockchains/apps) as an isolated Flutter application for Android, Windows, iOS and Linux. The corrected Windows R3 build passed automated checks and owner-reported account QR, scanner entry, spec15 connectivity and read-only reward inspection. The owner installed the signed Android 1.2.0 build3 prerelease through the data-preserving update path and reported preserved accounts/settings, ERA/spec15 connectivity, selected-account QR switching and scanner permission/cancellation/valid/invalid-input checks as passing. Its targeted reward inspection exposed a connection-readiness defect before eligibility fields were displayed. A separately versioned build4 correction preserves the package and signing identity and is awaiting only that targeted owner retest; build3 remains the website-published prerelease until a separately approved update. iOS and Linux are retained source targets whose platform builds and acceptance have not been completed. No NFT or reward transaction is inferred. The SDK wallet under this source tree remains a development integration surface and is not the native release artifact.
 
-## Staking status
+The original 16–19 September 2026 observation completed 4,321 healthy one-minute evaluations per host. Later rollout and runtime gates confirmed advancing finality and common finalized checkpoints across the fleet. These are controlled operational checks, not an independent audit or proof of uninterrupted availability.
 
-Staking is live and was not globally retired. `pallet_staking` remains in the runtime; its signed
-calls and normal bonding, nomination, unbonding, withdrawal, election, era, and authored reward-point
-flows remain available. `EraPayout=()`, so era reward records are zero and validator/nominator era
-rewards are not currently funded. Future validator/nominator reward economics remain V14 work.
+Sudo remains privileged, including runtime replacement. Ordinary Presale, Ecosystem and Liquidity custody requires three founder approvals; these are separate pallet accounts rather than standard Multisig-derived addresses. Foundation governance and Sudo removal are not complete. Supply began at 100M ETKN with a 900M lifetime mint allowance; principal-first reward allocations and annual caps are limits, not promised yields.
 
-## Security and licence
+Start with the proposed [V14.0.0 release notes](docs/RELEASE-v14.0.0.md), [build and tests](docs/BUILD.md), [safe full-node operation](docs/OPERATORS.md), [architecture](docs/ARCHITECTURE.md), [feature status](docs/FEATURE-STATUS.md), [validation](docs/VALIDATION.md), and [source provenance](docs/PROVENANCE.md). Original ERA-authored code retains Apache-2.0. Copied and vendored components retain their own terms; see [LICENSE](LICENSE), [NOTICE](NOTICE), and [third-party notices](THIRD_PARTY_NOTICES.md).
 
-Report vulnerabilities privately as described in [`SECURITY.md`](SECURITY.md). Do not open a public
-issue containing vulnerability details.
+The retained lockfile includes versions affected by two public dependency advisories. Version-preserving backports and focused regressions are retained; they do not certify that current dependencies are free of known vulnerabilities. See [dependency advisory status](docs/DEPENDENCY-ADVISORIES-20260919.md) and [security reporting](SECURITY.md).
 
-The imported historical tree retains the original root `LICENSE` and `THIRD_PARTY_NOTICES.md`.
-Workspace manifests declare `Apache-2.0`, while the root licence text is the Unlicense; this
-pre-existing inconsistency is recorded as a known gap and is not resolved by this review import.
+This is an unpublished V14 integration branch prepared for the existing [`erablockchains/era-blockchain`](https://github.com/erablockchains/era-blockchain) repository. Documentation is prepared in [`erablockchains/era-docs`](https://github.com/erablockchains/era-docs), and native wallet source is prepared in [`erablockchains/apps`](https://github.com/erablockchains/apps). It contains no production keys, private operational evidence or wallet secrets. The separately authorized website R6 content and wallet-download deployment is closed and is not GitHub publication approval. Branch pushes, the proposed `v14.0.0` tag, release assets and listings still require separate publication approval.

@@ -1,13 +1,14 @@
 //! Ordered, transactional V13 retained-supply reconciliation.
 //!
-//! This is a concrete one-shot runtime migration. It consumes only the four custody identities
-//! left symbolic by the approved vector; all source accounts, amounts and invariants are compiled
-//! into the runtime.
+//! This is a concrete one-shot runtime migration. The three founding-custody destinations are
+//! deterministic keyless pallet subaccounts; only the unrelated community-onboarding destination
+//! remains in the deployment input. All source accounts, amounts and invariants are compiled.
 
+use crate::v14_migration_lifecycle::{raw_value, required_version, version};
 use alloc::vec::Vec;
+use codec::{Decode, DecodeAll, Encode};
+use era_v14_custody_governance::CustodyCategory;
 
-#[cfg(feature = "try-runtime")]
-use codec::{Decode, Encode};
 use frame_support::{
     dispatch::DispatchResult,
     ensure,
@@ -34,14 +35,41 @@ use crate::{
         REWARD_RESERVE_SPENDABLE_TARGET, SUDO_OPERATIONAL_RESERVE, SUDO_TARGET_FREE,
         TARGET_RETAINED_ISSUANCE,
     },
-    AccountId, Assets, Balance, Balances, BlockNumber, EraWorlds, IssuanceCap, Multisig, Nfts,
-    Proxy, RewardReserve, Runtime, RuntimeHoldReason, Staking, System, Vesting,
+    AccountId, Assets, Balance, Balances, BlockNumber, EraWorlds, FounderCustody,
+    FounderCustodySigners, IssuanceCap, Multisig, Nfts, Proxy, RewardReserve, Runtime,
+    RuntimeHoldReason, Staking, System, Vesting,
 };
 
 pub const MIGRATION_VERSION: u16 = 13;
 pub const R6R3_PRE_MIGRATION_ISSUANCE: Balance = 1_005_003_999_999_999_994_375_836_000;
 pub const REQUIRED_DESTRUCTION: Balance = 905_003_999_999_999_994_375_836_000;
 pub const MAX_REWARD_LIABILITY_ENTRIES: u32 = 512;
+const CURRENT_COMPLETION_LENGTH: usize = 70;
+const LEGACY_COMPLETION_LENGTH: usize = 166;
+
+/// Exact V13 completion schema installed before category destinations became deterministic.
+/// The three former custody destinations are accepted only from this canonical stored record.
+#[derive(Clone, Decode, Encode, Eq, PartialEq)]
+struct LegacyV13MigrationInput<AccountId> {
+    reconciliation_vector_hash: [u8; 32],
+    active_presale_custody: AccountId,
+    ecosystem_custody: AccountId,
+    liquidity_custody: AccountId,
+    community_onboarding_custody: AccountId,
+}
+
+#[derive(Clone, Decode, Encode, Eq, PartialEq)]
+struct LegacyV13Completion<AccountId, BlockNumber> {
+    migration_version: u16,
+    completed_at: BlockNumber,
+    input: LegacyV13MigrationInput<AccountId>,
+}
+
+#[derive(Clone, Decode, Encode, Eq, PartialEq)]
+enum CompletedMarker {
+    Legacy(LegacyV13Completion<AccountId, BlockNumber>),
+    Current(V13Completion<AccountId, BlockNumber>),
+}
 
 /// 0.75 seconds plus conservative database work and a 3.5 MiB proof-size budget.
 ///
@@ -78,6 +106,30 @@ const fn decode_hex(value: &[u8; 64]) -> [u8; 32] {
 
 const APPROVED_VECTOR_HASH: [u8; 32] =
     decode_hex(b"12907ee338111ccb170a00cd37b5da1b823cbc47f4b110c2ff02fa2918110b09");
+
+const LEGACY_COMPLETED_AT: BlockNumber = 2_071_915;
+const LEGACY_PRESALE_DESTINATION: [u8; 32] =
+    decode_hex(b"b6bdd198bb94fc01298ece5c3f28a9321538648228435120df6280bbd2f6b036");
+const LEGACY_ECOSYSTEM_DESTINATION: [u8; 32] =
+    decode_hex(b"8ea320779dd7d15065698a50b62e8b43a2a90fe82cee462913c9b4b26731b81d");
+const LEGACY_LIQUIDITY_DESTINATION: [u8; 32] =
+    decode_hex(b"1ec05d5366ba036490b5dd53314f56f3dc370aa34e9dccb983fdb77b027c5127");
+const LEGACY_COMMUNITY_DESTINATION: [u8; 32] =
+    decode_hex(b"caff7a8ef895d0c81bd57a446f067aca4fda9366a712638a0345ddaa20347f14");
+const LEGACY_PRESALE_ACCOUNT_INFO_SHA256: [u8; 32] =
+    decode_hex(b"9f6ff3762651d8c9d88dfa205980607fff1856c72f00c13e5728b35bdc381155");
+const LEGACY_ECOSYSTEM_ACCOUNT_INFO_SHA256: [u8; 32] =
+    decode_hex(b"8c02b77c4a4bc4a9247f108acbb60cdca49badadd75abb6c94e8905c46798406");
+const LEGACY_LIQUIDITY_ACCOUNT_INFO_SHA256: [u8; 32] =
+    decode_hex(b"14ded94a6bd157de80bc52fc3990f89b6c13648fa34a62ad6129a437af3c053a");
+const OPERATIONAL_SUDO_ACCOUNT_INFO_SHA256: [u8; 32] =
+    decode_hex(b"bc9eaa729fea97c62f537be72a668a3ee286567e73369ea404df371d62408f57");
+const OPERATIONAL_SUDO_POST_UPGRADE_ACCOUNT_INFO_SHA256: [u8; 32] =
+    decode_hex(b"71b8ce940a06e5dbd3a25fd360dfe40266df3d07895cfd3e378e0e4f81765e64");
+const OPERATIONAL_SUDO_SEALED_NONCE: u32 = 22;
+const OPERATIONAL_FEE_ACCOUNT_INFO_SHA256: [u8; 32] =
+    decode_hex(b"22e960367908f6cadc2b7dda7a0c3f1fde0bd4c2bba43e525d5b514d3d8d857c");
+const OPERATIONAL_TREASURY_ACCOUNT_INFO_SHA256: [u8; 32] = OPERATIONAL_FEE_ACCOUNT_INFO_SHA256;
 
 #[derive(Clone, Copy)]
 struct ExpectedBalance {
@@ -195,6 +247,10 @@ const COMMUNITY_NOMINATION_TARGET: [u8; 32] =
 const PRESALE_TRANSFER: Balance = 20_000_000_000_000_000_000_000_000;
 const PRE_RESERVE_ECOSYSTEM_TRANSFER: Balance = 19_999_999_999_700_000_000_000_000;
 const ECOSYSTEM_TRANSFER: Balance = PRE_RESERVE_ECOSYSTEM_TRANSFER - SUDO_OPERATIONAL_RESERVE;
+const ECOSYSTEM_3_OF_3_CUSTODY_PRINCIPAL: Balance = ECOSYSTEM_TRANSFER;
+const ECOSYSTEM_OPERATIONAL_RETAINED: Balance =
+    SUDO_TARGET_FREE + ECOSYSTEM_PRESERVED[0].amount + ECOSYSTEM_PRESERVED[1].amount;
+const ECOSYSTEM_ALLOCATION_TOTAL: Balance = ECOSYSTEM_POOL;
 const LIQUIDITY_TRANSFER: Balance = 10_000_000_000_000_000_000_000_000;
 const COMMUNITY_TRANSFER: Balance = 5_977_953_000_000_003_028_396_000;
 
@@ -300,15 +356,25 @@ const ECOSYSTEM_PRESERVED: [ExpectedBalance; 2] = [
     ),
 ];
 
+const _: () = assert!(
+    ECOSYSTEM_3_OF_3_CUSTODY_PRINCIPAL + ECOSYSTEM_OPERATIONAL_RETAINED
+        == ECOSYSTEM_ALLOCATION_TOTAL
+);
+
 #[cfg(test)]
 pub(crate) fn test_input() -> V13MigrationInput<AccountId> {
     V13MigrationInput {
         reconciliation_vector_hash: APPROVED_VECTOR_HASH,
-        active_presale_custody: AccountId::new([0xf0; 32]),
-        ecosystem_custody: AccountId::new([0xf1; 32]),
-        liquidity_custody: AccountId::new([0xf2; 32]),
-        community_onboarding_custody: AccountId::new([0xf3; 32]),
+        community_onboarding_destination: AccountId::new([0xf3; 32]),
     }
+}
+
+pub(crate) fn custody_destinations() -> [AccountId; 3] {
+    [
+        FounderCustody::custody_account(CustodyCategory::Presale),
+        FounderCustody::custody_account(CustodyCategory::Ecosystem),
+        FounderCustody::custody_account(CustodyCategory::Liquidity),
+    ]
 }
 
 #[cfg(test)]
@@ -337,6 +403,15 @@ pub(crate) fn test_pre_migration_balances() -> Vec<(AccountId, Balance)> {
 }
 
 #[cfg(test)]
+pub(crate) fn test_custody_sources() -> [AccountId; 3] {
+    [
+        account(PRESALE_SOURCE.account),
+        account(ECOSYSTEM_SOURCE.account),
+        account(LIQUIDITY_SOURCE.account),
+    ]
+}
+
+#[cfg(test)]
 pub(crate) fn test_community_source() -> AccountId {
     account(COMMUNITY_SOURCE.account)
 }
@@ -344,6 +419,56 @@ pub(crate) fn test_community_source() -> AccountId {
 #[cfg(test)]
 pub(crate) fn test_sudo_account() -> AccountId {
     account(SUDO.account)
+}
+
+#[cfg(test)]
+pub(crate) fn test_legacy_destinations() -> [AccountId; 3] {
+    [
+        account(LEGACY_PRESALE_DESTINATION),
+        account(LEGACY_ECOSYSTEM_DESTINATION),
+        account(LEGACY_LIQUIDITY_DESTINATION),
+    ]
+}
+
+#[cfg(test)]
+pub(crate) fn test_legacy_community_destination() -> AccountId {
+    account(LEGACY_COMMUNITY_DESTINATION)
+}
+
+#[cfg(test)]
+pub(crate) fn test_legacy_completed_at() -> BlockNumber {
+    LEGACY_COMPLETED_AT
+}
+
+#[cfg(test)]
+pub(crate) fn test_legacy_marker_bytes() -> Vec<u8> {
+    let marker = LegacyV13Completion {
+        migration_version: MIGRATION_VERSION,
+        completed_at: LEGACY_COMPLETED_AT,
+        input: LegacyV13MigrationInput {
+            reconciliation_vector_hash: APPROVED_VECTOR_HASH,
+            active_presale_custody: account(LEGACY_PRESALE_DESTINATION),
+            ecosystem_custody: account(LEGACY_ECOSYSTEM_DESTINATION),
+            liquidity_custody: account(LEGACY_LIQUIDITY_DESTINATION),
+            community_onboarding_custody: account(LEGACY_COMMUNITY_DESTINATION),
+        },
+    };
+    let bytes = marker.encode();
+    assert_eq!(bytes.len(), LEGACY_COMPLETION_LENGTH);
+    assert_eq!(
+        sp_io::hashing::sha2_256(&bytes),
+        decode_hex(b"aaebff35a3fab18c3f10deec7a11d3bbbe2f41a35054f6333d3a04dd75b50972")
+    );
+    bytes
+}
+
+#[cfg(test)]
+pub(crate) fn test_transfer_amounts() -> [Balance; 3] {
+    [
+        PRESALE_TRANSFER,
+        ECOSYSTEM_3_OF_3_CUSTODY_PRINCIPAL,
+        LIQUIDITY_TRANSFER,
+    ]
 }
 
 #[cfg(test)]
@@ -495,6 +620,196 @@ fn ensure_balance(expected: ExpectedBalance) -> DispatchResult {
     Ok(())
 }
 
+fn ecosystem_accounting_is_exact() -> bool {
+    ECOSYSTEM_3_OF_3_CUSTODY_PRINCIPAL
+        .checked_add(SUDO_TARGET_FREE)
+        .and_then(|value| value.checked_add(ECOSYSTEM_PRESERVED[0].amount))
+        .and_then(|value| value.checked_add(ECOSYSTEM_PRESERVED[1].amount))
+        == Some(ECOSYSTEM_ALLOCATION_TOTAL)
+        && ECOSYSTEM_OPERATIONAL_RETAINED == 1_000_300_000_000_000_000
+}
+
+fn balance_auxiliary_storage_absent(who: &AccountId) -> bool {
+    !pallet_balances::Locks::<Runtime>::contains_key(who)
+        && !pallet_balances::Reserves::<Runtime>::contains_key(who)
+        && !pallet_balances::Holds::<Runtime>::contains_key(who)
+        && !pallet_balances::Freezes::<Runtime>::contains_key(who)
+}
+
+const ACCOUNT_INFO_LENGTH: usize = 80;
+
+fn sealed_account_info_bytes(who: &AccountId) -> Result<[u8; ACCOUNT_INFO_LENGTH], DispatchError> {
+    let key = frame_system::Account::<Runtime>::hashed_key_for(who);
+    let length = sp_io::storage::read(&key, &mut [], 0)
+        .ok_or(DispatchError::Other("V13 sealed AccountInfo is absent"))?;
+    ensure!(
+        length == ACCOUNT_INFO_LENGTH as u32,
+        DispatchError::Other("V13 sealed AccountInfo length mismatch")
+    );
+    let mut bytes = [0u8; ACCOUNT_INFO_LENGTH];
+    let read = sp_io::storage::read(&key, &mut bytes, 0)
+        .ok_or(DispatchError::Other("V13 sealed AccountInfo disappeared"))?;
+    ensure!(
+        read == length,
+        DispatchError::Other("V13 sealed AccountInfo read length mismatch")
+    );
+    Ok(bytes)
+}
+
+fn validate_sealed_account_info(who: &AccountId, expected_sha256: [u8; 32]) -> DispatchResult {
+    ensure!(
+        sp_io::hashing::sha2_256(&sealed_account_info_bytes(who)?) == expected_sha256,
+        DispatchError::Other("V13 sealed AccountInfo hash mismatch")
+    );
+    Ok(())
+}
+
+fn validate_operational_sudo_account_info(who: &AccountId) -> DispatchResult {
+    let bytes = sealed_account_info_bytes(who)?;
+    ensure!(
+        sp_io::hashing::sha2_256(&bytes) == OPERATIONAL_SUDO_POST_UPGRADE_ACCOUNT_INFO_SHA256,
+        DispatchError::Other("V13 post-upgrade Sudo AccountInfo hash mismatch")
+    );
+
+    let info = frame_system::AccountInfo::<u32, pallet_balances::AccountData<Balance>>::decode_all(
+        &mut &bytes[..],
+    )
+    .map_err(|_| DispatchError::Other("V13 malformed Sudo AccountInfo"))?;
+    let expected_nonce = OPERATIONAL_SUDO_SEALED_NONCE
+        .checked_add(1)
+        .ok_or(DispatchError::Other("V13 Sudo nonce overflow"))?;
+    ensure!(
+        info.nonce == expected_nonce
+            && info.consumers == 0
+            && info.providers == 1
+            && info.sufficients == 0
+            && info.data.free == SUDO_TARGET_FREE
+            && info.data.reserved == 0
+            && info.data.frozen == 0,
+        DispatchError::Other("V13 post-upgrade Sudo AccountInfo fields mismatch")
+    );
+
+    let mut sealed = info;
+    sealed.nonce = OPERATIONAL_SUDO_SEALED_NONCE;
+    let sealed_bytes = sealed.encode();
+    ensure!(
+        sealed_bytes.len() == ACCOUNT_INFO_LENGTH
+            && sp_io::hashing::sha2_256(&sealed_bytes) == OPERATIONAL_SUDO_ACCOUNT_INFO_SHA256,
+        DispatchError::Other("V13 Sudo AccountInfo does not match sealed pre-upgrade state")
+    );
+    Ok(())
+}
+
+fn validate_plain_account(who: &AccountId, expected: Balance) -> DispatchResult {
+    let info = frame_system::Account::<Runtime>::get(who);
+    ensure!(
+        frame_system::Account::<Runtime>::contains_key(who)
+            && info.consumers == 0
+            && info.providers == 1
+            && info.sufficients == 0
+            && info.data.free == expected
+            && info.data.reserved == 0
+            && info.data.frozen == 0
+            && balance(who) == expected
+            && <Balances as Inspect<AccountId>>::reducible_balance(
+                who,
+                Preservation::Expendable,
+                Fortitude::Polite,
+            ) == expected
+            && balance_auxiliary_storage_absent(who),
+        DispatchError::Other("V13 legacy bridge account state mismatch")
+    );
+    Ok(())
+}
+
+fn validate_pristine_destination(who: &AccountId) -> DispatchResult {
+    let info = frame_system::Account::<Runtime>::get(who);
+    ensure!(
+        info.nonce == 0
+            && info.consumers == 0
+            && info.providers == 0
+            && info.sufficients == 0
+            && info.data.free == 0
+            && info.data.reserved == 0
+            && info.data.frozen == 0
+            && balance(who) == 0
+            && balance_auxiliary_storage_absent(who),
+        DispatchError::Other("V13 legacy bridge destination is not pristine")
+    );
+    Ok(())
+}
+
+fn operational_accounts() -> Result<[AccountId; 3], DispatchError> {
+    let sudo = pallet_sudo::Key::<Runtime>::get()
+        .ok_or(DispatchError::Other("V13 operational Sudo account missing"))?;
+    let fee = RewardReserve::fee_collection_account();
+    let treasury = RewardReserve::ecosystem_treasury_account();
+    ensure!(
+        sudo == account(SUDO.account)
+            && fee == account(ECOSYSTEM_PRESERVED[0].account)
+            && treasury == account(ECOSYSTEM_PRESERVED[1].account)
+            && sudo != fee
+            && sudo != treasury
+            && fee != treasury,
+        DispatchError::Other("V13 operational account identity mismatch")
+    );
+    Ok([sudo, fee, treasury])
+}
+
+fn validate_operational_accounts() -> DispatchResult {
+    ensure!(
+        ecosystem_accounting_is_exact(),
+        DispatchError::Other("V13 ecosystem allocation arithmetic mismatch")
+    );
+    let [sudo, fee, treasury] = operational_accounts()?;
+    validate_plain_account(&sudo, SUDO_TARGET_FREE)?;
+    validate_operational_sudo_account_info(&sudo)?;
+    validate_plain_account(&fee, ECOSYSTEM_PRESERVED[0].amount)?;
+    validate_sealed_account_info(&fee, OPERATIONAL_FEE_ACCOUNT_INFO_SHA256)?;
+    validate_plain_account(&treasury, ECOSYSTEM_PRESERVED[1].amount)?;
+    validate_sealed_account_info(&treasury, OPERATIONAL_TREASURY_ACCOUNT_INFO_SHA256)
+}
+
+#[cfg(test)]
+pub(crate) fn test_validate_operational_sudo_account_info() -> DispatchResult {
+    validate_operational_sudo_account_info(&test_sudo_account())
+}
+
+#[cfg(test)]
+pub(crate) fn test_validate_pre_upgrade_sudo_account_info() -> DispatchResult {
+    validate_sealed_account_info(&test_sudo_account(), OPERATIONAL_SUDO_ACCOUNT_INFO_SHA256)
+}
+
+fn legacy_destinations(marker: &LegacyV13Completion<AccountId, BlockNumber>) -> [AccountId; 3] {
+    [
+        marker.input.active_presale_custody.clone(),
+        marker.input.ecosystem_custody.clone(),
+        marker.input.liquidity_custody.clone(),
+    ]
+}
+
+fn validate_no_prior_custody_operation() -> DispatchResult {
+    for category in [
+        CustodyCategory::Presale,
+        CustodyCategory::Ecosystem,
+        CustodyCategory::Liquidity,
+    ] {
+        ensure!(
+            !era_v14_custody_governance::PendingWithdrawal::<Runtime>::contains_key(category)
+                && !era_v14_custody_governance::NextRequestId::<Runtime>::contains_key(category),
+            DispatchError::Other("V13 legacy bridge custody state is not pristine")
+        );
+    }
+    Ok(())
+}
+
+fn identities_are_distinct(identities: &[AccountId]) -> bool {
+    identities.iter().enumerate().all(|(index, identity)| {
+        identity != &AccountId::new([0; 32])
+            && identities[..index].iter().all(|prior| prior != identity)
+    })
+}
+
 fn ensure_burn_plan_before(plan: BurnPlan) -> DispatchResult {
     ensure!(
         balance(&account(plan.account)) == plan.current,
@@ -561,7 +876,7 @@ fn validate_reward_liabilities() -> DispatchResult {
 }
 
 fn prefix_contains_only_version<P: PalletInfoAccess>(expected: StorageVersion) -> bool {
-    if StorageVersion::get::<P>() != expected {
+    if required_version::<P>() != Ok(expected) {
         return false;
     }
     let prefix = P::name_hash();
@@ -609,13 +924,64 @@ fn validate_application_state() -> DispatchResult {
 }
 
 fn validate_versions() -> DispatchResult {
+    validate_versions_for_initialization(false)
+}
+
+/// Validate the version keys needed by the completed-V13 bridge without walking any pallet
+/// prefix. The bridge is deliberately confined to a fixed, reviewable set of storage keys.
+fn validate_bridge_versions() -> DispatchResult {
     ensure!(
-        StorageVersion::get::<IssuanceCap>() == StorageVersion::new(1),
-        DispatchError::Other("V13 IssuanceCap storage version is not 1")
+        version::<IssuanceCap>()? == Some(StorageVersion::new(1)),
+        DispatchError::Other("V13 IssuanceCap storage version is not supported")
+    );
+    let reward_version = required_version::<RewardReserve>()?;
+    ensure!(
+        reward_version == StorageVersion::new(2) || reward_version == StorageVersion::new(3),
+        DispatchError::Other(
+            "V13 RewardReserve storage version is not 2 or append-only V14 version 3"
+        )
     );
     ensure!(
-        StorageVersion::get::<RewardReserve>() == StorageVersion::new(2),
-        DispatchError::Other("V13 RewardReserve storage version is not 2")
+        required_version::<Multisig>()? == StorageVersion::new(1),
+        DispatchError::Other("V13 Multisig storage version mismatch")
+    );
+    ensure!(
+        required_version::<Proxy>()? == StorageVersion::new(0),
+        DispatchError::Other("V13 Proxy storage version mismatch")
+    );
+    ensure!(
+        required_version::<Assets>()? == StorageVersion::new(1),
+        DispatchError::Other("V13 Assets storage version mismatch")
+    );
+    ensure!(
+        required_version::<Nfts>()? == StorageVersion::new(1),
+        DispatchError::Other("V13 Nfts storage version mismatch")
+    );
+    ensure!(
+        required_version::<EraWorlds>()? == StorageVersion::new(1),
+        DispatchError::Other("V13 EraWorlds storage version mismatch")
+    );
+    Ok(())
+}
+
+fn validate_versions_for_initialization(initial: bool) -> DispatchResult {
+    match version::<IssuanceCap>()? {
+        None if initial => {
+            crate::v14_migration_lifecycle::pristine_namespace::<IssuanceCap>(false)?
+        }
+        Some(v) if v == StorageVersion::new(1) => {}
+        _ => {
+            return Err(DispatchError::Other(
+                "V13 IssuanceCap storage version is not supported",
+            ))
+        }
+    }
+    let reward_version = required_version::<RewardReserve>()?;
+    ensure!(
+        reward_version == StorageVersion::new(2) || reward_version == StorageVersion::new(3),
+        DispatchError::Other(
+            "V13 RewardReserve storage version is not 2 or append-only V14 version 3"
+        )
     );
     validate_application_state()
 }
@@ -636,37 +1002,79 @@ fn all_known_accounts() -> Vec<AccountId> {
     result
 }
 
+fn validate_custody_identities() -> DispatchResult {
+    let destinations = custody_destinations();
+    let signers = FounderCustodySigners::get();
+    ensure!(
+        signers[0] < signers[1] && signers[1] < signers[2],
+        DispatchError::Other("V13 custody signers are not canonical and distinct")
+    );
+
+    let identities = [
+        account(PRESALE_SOURCE.account),
+        account(ECOSYSTEM_SOURCE.account),
+        account(LIQUIDITY_SOURCE.account),
+        destinations[0].clone(),
+        destinations[1].clone(),
+        destinations[2].clone(),
+        signers[0].clone(),
+        signers[1].clone(),
+        signers[2].clone(),
+    ];
+    for (index, identity) in identities.iter().enumerate() {
+        ensure!(
+            identity != &AccountId::new([0; 32])
+                && identities[..index]
+                    .iter()
+                    .all(|earlier| earlier != identity),
+            DispatchError::Other("V13 legacy, custody, and signer identities are not distinct")
+        );
+    }
+
+    let standard_controller = account(decode_hex(
+        b"a3867a592cdfe4142f19f0f709842c9f3e48af3ecbfd77308bdf533c3ee86158",
+    ));
+    ensure!(
+        !destinations.contains(&standard_controller),
+        DispatchError::Other("V13 standard multisig controller is a custody destination")
+    );
+    Ok(())
+}
+
 fn validate_input(input: &V13MigrationInput<AccountId>) -> DispatchResult {
     ensure!(
         input.reconciliation_vector_hash == APPROVED_VECTOR_HASH,
         DispatchError::Other("V13 reconciliation vector hash mismatch")
     );
+    validate_custody_identities()?;
+    let custody = custody_destinations();
     let destinations = [
-        &input.active_presale_custody,
-        &input.ecosystem_custody,
-        &input.liquidity_custody,
-        &input.community_onboarding_custody,
+        custody[0].clone(),
+        custody[1].clone(),
+        custody[2].clone(),
+        input.community_onboarding_destination.clone(),
     ];
+    let known = all_known_accounts();
     for (index, destination) in destinations.iter().enumerate() {
         ensure!(
             balance(destination) == 0,
-            DispatchError::Other("V13 custody destination is not empty")
+            DispatchError::Other("V13 destination is not empty")
         );
         ensure!(
             !frame_system::Account::<Runtime>::contains_key(destination),
-            DispatchError::Other("V13 custody destination already has system state")
+            DispatchError::Other("V13 destination already has system state")
         );
         ensure!(
-            !all_known_accounts()
+            !known
                 .iter()
-                .any(|known| known == *destination),
-            DispatchError::Other("V13 custody destination aliases a vector account")
+                .any(|known_account| known_account == destination),
+            DispatchError::Other("V13 destination aliases a vector account")
         );
         ensure!(
             destinations[..index]
                 .iter()
-                .all(|earlier| *earlier != *destination),
-            DispatchError::Other("V13 custody destinations are not distinct")
+                .all(|earlier| earlier != destination),
+            DispatchError::Other("V13 destinations are not distinct")
         );
     }
     Ok(())
@@ -708,13 +1116,13 @@ fn validate_policy_arithmetic() -> DispatchResult {
 
 fn validate_pending(input: &V13MigrationInput<AccountId>) -> DispatchResult {
     validate_policy_arithmetic()?;
-    validate_versions()?;
+    validate_versions_for_initialization(true)?;
     ensure!(
         <Balances as Inspect<AccountId>>::total_issuance() == R6R3_PRE_MIGRATION_ISSUANCE,
         DispatchError::Other("V13 pre-migration issuance mismatch")
     );
     ensure!(
-        RemainingAllowance::<Runtime>::get().is_none(),
+        !sp_io::storage::exists(&RemainingAllowance::<Runtime>::hashed_key()),
         DispatchError::Other("V13 allowance is partially initialized")
     );
     ensure!(
@@ -853,21 +1261,22 @@ fn validate_final_allocations(marker: &V13Completion<AccountId, BlockNumber>) ->
     for item in ECOSYSTEM_PRESERVED {
         ensure_balance(item)?;
     }
+    let custody = custody_destinations();
     ensure!(
-        balance(&marker.input.active_presale_custody) == PRESALE_TRANSFER,
+        balance(&custody[0]) == PRESALE_TRANSFER,
         DispatchError::Other("V13 presale custody allocation mismatch")
     );
     ensure!(
-        balance(&marker.input.ecosystem_custody) == ECOSYSTEM_TRANSFER,
+        balance(&custody[1]) == ECOSYSTEM_TRANSFER,
         DispatchError::Other("V13 ecosystem custody allocation mismatch")
     );
     ensure!(
-        balance(&marker.input.liquidity_custody) == LIQUIDITY_TRANSFER,
+        balance(&custody[2]) == LIQUIDITY_TRANSFER,
         DispatchError::Other("V13 liquidity custody allocation mismatch")
     );
     ensure!(
-        balance(&marker.input.community_onboarding_custody) == COMMUNITY_TRANSFER,
-        DispatchError::Other("V13 community custody allocation mismatch")
+        balance(&marker.input.community_onboarding_destination) == COMMUNITY_TRANSFER,
+        DispatchError::Other("V13 community destination allocation mismatch")
     );
 
     let founding = checked_sum(FOUNDERS.iter().map(|plan| plan.target))?;
@@ -883,9 +1292,9 @@ fn validate_final_allocations(marker: &V13Completion<AccountId, BlockNumber>) ->
     )?;
     ensure!(
         founding == FOUNDING_MEMBERS_POOL
-            && balance(&marker.input.active_presale_custody) == ACTIVE_PRESALE_POOL
+            && balance(&custody[0]) == ACTIVE_PRESALE_POOL
             && ecosystem == ECOSYSTEM_POOL
-            && balance(&marker.input.liquidity_custody) == LIQUIDITY_RESERVE_POOL
+            && balance(&custody[2]) == LIQUIDITY_RESERVE_POOL
             && airdrop_validator == AIRDROP_VALIDATOR_POOL,
         DispatchError::Other("V13 retained category allocation mismatch")
     );
@@ -906,13 +1315,23 @@ fn validate_final_allocations(marker: &V13Completion<AccountId, BlockNumber>) ->
 fn validate_completed(marker: &V13Completion<AccountId, BlockNumber>) -> DispatchResult {
     validate_policy_arithmetic()?;
     validate_versions()?;
+    validate_completed_state(marker)
+}
+
+fn validate_bridge_completed(marker: &V13Completion<AccountId, BlockNumber>) -> DispatchResult {
+    validate_policy_arithmetic()?;
+    validate_bridge_versions()?;
+    validate_completed_state(marker)
+}
+
+fn validate_completed_state(marker: &V13Completion<AccountId, BlockNumber>) -> DispatchResult {
     ensure!(
         marker.migration_version == MIGRATION_VERSION
             && marker.input.reconciliation_vector_hash == APPROVED_VECTOR_HASH,
         DispatchError::Other("V13 completion marker mismatch")
     );
     ensure!(
-        issuance_cap::v13_migration_input::<Runtime>().is_none(),
+        !sp_io::storage::exists(&issuance_cap::v13_migration_input_key()),
         DispatchError::Other("V13 deployment input remains after completion")
     );
     ensure!(
@@ -927,28 +1346,434 @@ fn validate_completed(marker: &V13Completion<AccountId, BlockNumber>) -> Dispatc
     validate_reward_liabilities()
 }
 
+/// The protected completion marker, not the current spec version, is authoritative.
+/// Keep immutable identity/version/cap/liability checks, but do not freeze later balances,
+/// claims, application state or completed vesting schedules at the reconciliation snapshot.
+fn decode_canonical<T: DecodeAll + Encode>(bytes: &[u8]) -> Result<T, DispatchError> {
+    let value = T::decode_all(&mut &bytes[..])
+        .map_err(|_| DispatchError::Other("V13 completion marker decoding failed"))?;
+    ensure!(
+        value.encode() == bytes,
+        DispatchError::Other("V13 completion marker is not canonical SCALE")
+    );
+    Ok(value)
+}
+
+fn completed_marker() -> Result<Option<CompletedMarker>, DispatchError> {
+    let key = V13MigrationCompleted::<Runtime>::hashed_key();
+    let Some(length) = sp_io::storage::read(&key, &mut [], 0) else {
+        return Ok(None);
+    };
+    ensure!(
+        length <= LEGACY_COMPLETION_LENGTH as u32,
+        DispatchError::Other("V13 completion marker exceeds bounded schema")
+    );
+
+    let mut bytes = [0u8; LEGACY_COMPLETION_LENGTH];
+    let read = sp_io::storage::read(&key, &mut bytes, 0)
+        .ok_or(DispatchError::Other("V13 completion marker disappeared"))?;
+    ensure!(
+        read == length,
+        DispatchError::Other("V13 completion marker changed during read")
+    );
+
+    match length as usize {
+        CURRENT_COMPLETION_LENGTH => Ok(Some(CompletedMarker::Current(decode_canonical(
+            &bytes[..CURRENT_COMPLETION_LENGTH],
+        )?))),
+        LEGACY_COMPLETION_LENGTH => Ok(Some(CompletedMarker::Legacy(decode_canonical(
+            &bytes[..LEGACY_COMPLETION_LENGTH],
+        )?))),
+        _ => Err(DispatchError::Other(
+            "V13 completion marker has unknown encoded length",
+        )),
+    }
+}
+
+fn validate_legacy_marker(marker: &LegacyV13Completion<AccountId, BlockNumber>) -> DispatchResult {
+    ensure!(
+        marker.migration_version == MIGRATION_VERSION
+            && marker.completed_at == LEGACY_COMPLETED_AT
+            && marker.completed_at <= System::block_number()
+            && marker.input.reconciliation_vector_hash == APPROVED_VECTOR_HASH
+            && marker.input.active_presale_custody == account(LEGACY_PRESALE_DESTINATION)
+            && marker.input.ecosystem_custody == account(LEGACY_ECOSYSTEM_DESTINATION)
+            && marker.input.liquidity_custody == account(LEGACY_LIQUIDITY_DESTINATION)
+            && marker.input.community_onboarding_custody == account(LEGACY_COMMUNITY_DESTINATION),
+        DispatchError::Other("V13 legacy completion marker does not match sealed evidence")
+    );
+    Ok(())
+}
+
+fn validate_legacy_completed(
+    marker: &LegacyV13Completion<AccountId, BlockNumber>,
+) -> DispatchResult {
+    validate_policy_arithmetic()?;
+    validate_bridge_versions()?;
+    validate_legacy_marker(marker)?;
+    ensure!(
+        completed_marker()? == Some(CompletedMarker::Legacy(marker.clone())),
+        DispatchError::Other("V13 legacy completion marker changed during validation")
+    );
+    ensure!(
+        !sp_io::storage::exists(&issuance_cap::v13_migration_input_key()),
+        DispatchError::Other("V13 deployment input remains with legacy completion")
+    );
+    ensure!(
+        <Balances as Inspect<AccountId>>::total_issuance() == TARGET_RETAINED_ISSUANCE,
+        DispatchError::Other("V13 legacy completed issuance mismatch")
+    );
+    ensure!(
+        RemainingAllowance::<Runtime>::get() == Some(MAXIMUM_POST_CORRECTION_NEW_ISSUANCE),
+        DispatchError::Other("V13 legacy completed allowance mismatch")
+    );
+
+    validate_custody_identities()?;
+    validate_no_prior_custody_operation()?;
+    validate_operational_accounts()?;
+
+    let legacy = legacy_destinations(marker);
+    let current = custody_destinations();
+    let signers = FounderCustodySigners::get();
+    let community = marker.input.community_onboarding_custody.clone();
+    let operational = operational_accounts()?;
+    let identities = [
+        legacy[0].clone(),
+        legacy[1].clone(),
+        legacy[2].clone(),
+        current[0].clone(),
+        current[1].clone(),
+        current[2].clone(),
+        signers[0].clone(),
+        signers[1].clone(),
+        signers[2].clone(),
+        community.clone(),
+        operational[0].clone(),
+        operational[1].clone(),
+        operational[2].clone(),
+    ];
+    ensure!(
+        identities_are_distinct(&identities),
+        DispatchError::Other("V13 legacy bridge identities are not mutually distinct")
+    );
+    let known = all_known_accounts();
+    for destination in legacy.iter().chain(current.iter()).chain([&community]) {
+        ensure!(
+            !known.contains(destination),
+            DispatchError::Other("V13 legacy bridge destination aliases a vector account")
+        );
+    }
+
+    validate_plain_account(&legacy[0], PRESALE_TRANSFER)?;
+    validate_sealed_account_info(&legacy[0], LEGACY_PRESALE_ACCOUNT_INFO_SHA256)?;
+    validate_plain_account(&legacy[1], ECOSYSTEM_3_OF_3_CUSTODY_PRINCIPAL)?;
+    validate_sealed_account_info(&legacy[1], LEGACY_ECOSYSTEM_ACCOUNT_INFO_SHA256)?;
+    validate_plain_account(&legacy[2], LIQUIDITY_TRANSFER)?;
+    validate_sealed_account_info(&legacy[2], LEGACY_LIQUIDITY_ACCOUNT_INFO_SHA256)?;
+    validate_plain_account(&community, COMMUNITY_TRANSFER)?;
+    for destination in &current {
+        validate_pristine_destination(destination)?;
+    }
+
+    for plan in FOUNDERS {
+        ensure_burn_plan_after(plan)?;
+    }
+    for plan in [
+        REWARD_POT,
+        PRESALE_SOURCE,
+        ECOSYSTEM_SOURCE,
+        LIQUIDITY_SOURCE,
+        COMMUNITY_SOURCE,
+    ] {
+        ensure_burn_plan_after(plan)?;
+    }
+    for item in AIRDROP_PRESERVED {
+        ensure_balance(item)?;
+    }
+    for item in ECOSYSTEM_PRESERVED {
+        ensure_balance(item)?;
+    }
+    validate_founding_vesting(marker.completed_at)?;
+    validate_community_staking_completed()?;
+    validate_reward_liabilities()
+}
+
+fn transfer_account_exact(
+    source: &AccountId,
+    destination: &AccountId,
+    amount: Balance,
+) -> DispatchResult {
+    let transferred = <Balances as Mutate<AccountId>>::transfer(
+        source,
+        destination,
+        amount,
+        Preservation::Expendable,
+    )?;
+    ensure!(
+        transferred == amount,
+        DispatchError::Other("V13 legacy bridge transfer was not exact")
+    );
+    Ok(())
+}
+
+fn current_marker_from_legacy(
+    marker: &LegacyV13Completion<AccountId, BlockNumber>,
+) -> V13Completion<AccountId, BlockNumber> {
+    V13Completion {
+        migration_version: marker.migration_version,
+        completed_at: marker.completed_at,
+        input: V13MigrationInput {
+            reconciliation_vector_hash: marker.input.reconciliation_vector_hash,
+            community_onboarding_destination: marker.input.community_onboarding_custody.clone(),
+        },
+    }
+}
+
+fn validate_legacy_bridge_poststate(
+    legacy_marker: &LegacyV13Completion<AccountId, BlockNumber>,
+    current_marker: &V13Completion<AccountId, BlockNumber>,
+    issuance_before: Balance,
+    operational_before: &[frame_system::AccountInfo<u32, pallet_balances::AccountData<Balance>>; 3],
+) -> DispatchResult {
+    ensure!(
+        completed_marker()? == Some(CompletedMarker::Current(current_marker.clone())),
+        DispatchError::Other("V13 legacy bridge current marker mismatch")
+    );
+    validate_bridge_completed(current_marker)?;
+    ensure!(
+        <Balances as Inspect<AccountId>>::total_issuance() == issuance_before,
+        DispatchError::Other("V13 legacy bridge changed total issuance")
+    );
+
+    let legacy = legacy_destinations(legacy_marker);
+    for destination in &legacy {
+        validate_pristine_destination(destination)?;
+    }
+    let current = custody_destinations();
+    validate_plain_account(&current[0], PRESALE_TRANSFER)?;
+    validate_plain_account(&current[1], ECOSYSTEM_3_OF_3_CUSTODY_PRINCIPAL)?;
+    validate_plain_account(&current[2], LIQUIDITY_TRANSFER)?;
+    validate_no_prior_custody_operation()?;
+    validate_operational_accounts()?;
+    let operational = operational_accounts()?;
+    for (index, who) in operational.iter().enumerate() {
+        ensure!(
+            frame_system::Account::<Runtime>::get(who) == operational_before[index],
+            DispatchError::Other("V13 legacy bridge changed an operational account")
+        );
+    }
+    Ok(())
+}
+
+fn execute_legacy_bridge_with_checkpoint<F>(
+    marker: LegacyV13Completion<AccountId, BlockNumber>,
+    mut checkpoint: F,
+) -> Result<Weight, DispatchError>
+where
+    F: FnMut(u8) -> DispatchResult,
+{
+    // This is deliberately the only pre-write section. Every marker, identity, balance,
+    // reference, allocation and custody invariant is validated before the first transfer.
+    validate_legacy_completed(&marker)?;
+    let issuance_before = <Balances as Inspect<AccountId>>::total_issuance();
+    let operational = operational_accounts()?;
+    let operational_before = operational
+        .each_ref()
+        .map(frame_system::Account::<Runtime>::get);
+    let legacy = legacy_destinations(&marker);
+    let current = custody_destinations();
+
+    transfer_account_exact(&legacy[0], &current[0], PRESALE_TRANSFER)?;
+    checkpoint(1)?;
+    transfer_account_exact(&legacy[1], &current[1], ECOSYSTEM_3_OF_3_CUSTODY_PRINCIPAL)?;
+    checkpoint(2)?;
+    transfer_account_exact(&legacy[2], &current[2], LIQUIDITY_TRANSFER)?;
+    checkpoint(3)?;
+
+    let current_marker = current_marker_from_legacy(&marker);
+    V13MigrationCompleted::<Runtime>::put(&current_marker);
+    checkpoint(4)?;
+    validate_legacy_bridge_poststate(
+        &marker,
+        &current_marker,
+        issuance_before,
+        &operational_before,
+    )?;
+    Ok(declared_weight())
+}
+
+fn execute_legacy_bridge(
+    marker: LegacyV13Completion<AccountId, BlockNumber>,
+) -> Result<Weight, DispatchError> {
+    execute_legacy_bridge_with_checkpoint(marker, |_| Ok(()))
+}
+
+#[cfg(test)]
+pub(crate) fn test_execute_legacy_bridge(fail_at: Option<u8>) -> Result<Weight, DispatchError> {
+    let marker = match completed_marker()? {
+        Some(CompletedMarker::Legacy(marker)) => marker,
+        _ => return Err(DispatchError::Other("test legacy marker absent")),
+    };
+    with_transaction(|| {
+        let result = execute_legacy_bridge_with_checkpoint(marker, |checkpoint| {
+            ensure!(
+                fail_at != Some(checkpoint),
+                DispatchError::Other("injected V13 legacy bridge failure")
+            );
+            Ok(())
+        });
+        if result.is_ok() {
+            TransactionOutcome::Commit(result)
+        } else {
+            TransactionOutcome::Rollback(result)
+        }
+    })
+}
+
+#[cfg(test)]
+pub(crate) fn test_ecosystem_accounting_is_exact() -> bool {
+    ecosystem_accounting_is_exact()
+}
+fn validate_replay(marker: &V13Completion<AccountId, BlockNumber>) -> DispatchResult {
+    validate_policy_arithmetic()?;
+    ensure!(
+        required_version::<IssuanceCap>()? == StorageVersion::new(1),
+        DispatchError::Other("V13 replay issuance-cap version mismatch")
+    );
+    let reward_version = required_version::<RewardReserve>()?;
+    ensure!(
+        reward_version == StorageVersion::new(2) || reward_version == StorageVersion::new(3),
+        DispatchError::Other("V13 replay reward version mismatch")
+    );
+    ensure!(
+        marker.migration_version == MIGRATION_VERSION
+            && marker.input.reconciliation_vector_hash == APPROVED_VECTOR_HASH
+            && marker.completed_at > 0
+            && marker.completed_at <= System::block_number(),
+        DispatchError::Other("V13 replay completion evidence mismatch")
+    );
+    ensure!(
+        !sp_io::storage::exists(&issuance_cap::v13_migration_input_key()),
+        DispatchError::Other("V13 deployment input remains after completion")
+    );
+    validate_custody_identities()?;
+    let custody = custody_destinations();
+    let destinations = [
+        custody[0].clone(),
+        custody[1].clone(),
+        custody[2].clone(),
+        marker.input.community_onboarding_destination.clone(),
+    ];
+    let known = all_known_accounts();
+    for (index, destination) in destinations.iter().enumerate() {
+        ensure!(
+            !known.contains(destination)
+                && destination != &AccountId::new([0; 32])
+                && destinations[..index]
+                    .iter()
+                    .all(|earlier| earlier != destination),
+            DispatchError::Other("V13 replay destination identity mismatch")
+        );
+    }
+    let remaining = raw_value::<Balance, 16>(&RemainingAllowance::<Runtime>::hashed_key())?
+        .ok_or(DispatchError::Other("V13 replay allowance missing"))?;
+    let issuance = <Balances as Inspect<AccountId>>::total_issuance();
+    ensure!(
+        remaining <= MAXIMUM_POST_CORRECTION_NEW_ISSUANCE
+            && issuance
+                .checked_add(remaining)
+                .is_some_and(|sum| sum <= crate::upgrade13_policy::ABSOLUTE_LIFETIME_CAP),
+        DispatchError::Other("V13 replay lifetime cap mismatch")
+    );
+    ensure!(
+        matches!(required_version::<Nfts>()?, v if v == StorageVersion::new(1) || v == StorageVersion::new(2)),
+        DispatchError::Other("V13 replay NFT version mismatch")
+    );
+    for actual in [
+        required_version::<Multisig>()?,
+        required_version::<Assets>()?,
+        required_version::<EraWorlds>()?,
+    ] {
+        ensure!(
+            actual == StorageVersion::new(1),
+            DispatchError::Other("V13 replay application version mismatch")
+        );
+    }
+    ensure!(
+        required_version::<Proxy>()? == StorageVersion::new(0),
+        DispatchError::Other("V13 replay proxy version mismatch")
+    );
+    let v14 = raw_value::<BlockNumber, 4>(
+        &pallet_security_budget::MigrationCompletedAt::<Runtime>::hashed_key(),
+    )?;
+    if let Some(at) = v14 {
+        ensure!(
+            version::<crate::SecurityBudget>()? == Some(StorageVersion::new(1))
+                && reward_version == StorageVersion::new(3)
+                && at >= marker.completed_at
+                && at <= System::block_number()
+                && crate::SecurityBudget::legacy_reward_liability()
+                    == crate::SecurityBudgetExistingEarnedRewardLiability::get()
+                && crate::SecurityBudget::accounted_reward_total()?
+                    <= crate::SecurityBudgetTotalStakingRewards::get(),
+            DispatchError::Other("V13 replay V14 completion evidence mismatch")
+        );
+        // Telescoping the adopted 90/10 split: gross = 10 * treasury_total - carry.
+        // Fee/tip funding is deliberately excluded. Burns cannot change these issuance records.
+        let treasury = raw_value::<Balance, 16>(&pallet_security_budget::TreasuryIssuanceTotal::<
+            Runtime,
+        >::hashed_key())?
+        .unwrap_or(0);
+        let carry = raw_value::<u8, 1>(
+            &pallet_security_budget::IssuanceSplitCarry::<Runtime>::hashed_key(),
+        )?
+        .unwrap_or(0);
+        ensure!(
+            carry < 10,
+            DispatchError::Other("V13 replay split carry corrupt")
+        );
+        let gross = treasury
+            .checked_mul(10)
+            .and_then(|n| n.checked_sub(carry.into()))
+            .ok_or(DispatchError::Other(
+                "V13 replay issuance evidence overflow",
+            ))?;
+        ensure!(
+            MAXIMUM_POST_CORRECTION_NEW_ISSUANCE.checked_sub(gross) == Some(remaining),
+            DispatchError::Other("V13 replay allowance differs from consumed issuance")
+        );
+    } else {
+        // No production issuance route existed before V14's authorized activation.
+        ensure!(
+            remaining == MAXIMUM_POST_CORRECTION_NEW_ISSUANCE,
+            DispatchError::Other("V13 replay unaccounted pre-V14 issuance")
+        );
+    }
+    validate_reward_liabilities()?;
+    ensure!(
+        RewardReserve::pot_balance()
+            >= RewardReserve::committed_liabilities()
+                .checked_add(RewardReserve::reward_pot_floor())
+                .ok_or(DispatchError::Other("V13 replay liability overflow"))?,
+        DispatchError::Other("V13 replay reward insolvency")
+    );
+    Ok(())
+}
+
 fn execute_pending(input: V13MigrationInput<AccountId>) -> Result<Weight, DispatchError> {
     validate_pending(&input)?;
+    // Replace the generated initializer only for a fully validated, pristine predecessor.
+    // This version write belongs to the same transaction as all V13 reconciliation writes.
+    StorageVersion::new(1).put::<IssuanceCap>();
 
     retire_community_staking()?;
-    transfer_exact(
-        PRESALE_SOURCE,
-        &input.active_presale_custody,
-        PRESALE_TRANSFER,
-    )?;
-    transfer_exact(
-        ECOSYSTEM_SOURCE,
-        &input.ecosystem_custody,
-        ECOSYSTEM_TRANSFER,
-    )?;
-    transfer_exact(
-        LIQUIDITY_SOURCE,
-        &input.liquidity_custody,
-        LIQUIDITY_TRANSFER,
-    )?;
+    let custody = custody_destinations();
+    transfer_exact(PRESALE_SOURCE, &custody[0], PRESALE_TRANSFER)?;
+    transfer_exact(ECOSYSTEM_SOURCE, &custody[1], ECOSYSTEM_TRANSFER)?;
+    transfer_exact(LIQUIDITY_SOURCE, &custody[2], LIQUIDITY_TRANSFER)?;
     transfer_exact(
         COMMUNITY_SOURCE,
-        &input.community_onboarding_custody,
+        &input.community_onboarding_destination,
         COMMUNITY_TRANSFER,
     )?;
 
@@ -975,7 +1800,6 @@ fn execute_pending(input: V13MigrationInput<AccountId>) -> Result<Weight, Dispat
     );
 
     RemainingAllowance::<Runtime>::put(MAXIMUM_POST_CORRECTION_NEW_ISSUANCE);
-    StorageVersion::new(1).put::<IssuanceCap>();
     issuance_cap::clear_v13_migration_input();
     let marker = V13Completion {
         migration_version: MIGRATION_VERSION,
@@ -991,15 +1815,44 @@ pub struct V13Migration;
 
 impl OnRuntimeUpgrade for V13Migration {
     fn on_runtime_upgrade() -> Weight {
-        if let Some(marker) = V13MigrationCompleted::<Runtime>::get() {
-            validate_completed(&marker).unwrap_or_else(|error| {
-                panic!("V13 completed-state verification failed: {error:?}")
-            });
-            return declared_weight();
+        if crate::fresh_genesis::Enabled::<crate::Runtime>::get() {
+            crate::fresh_genesis::validate_lifecycle();
+            return <crate::Runtime as frame_system::Config>::DbWeight::get().reads(12);
+        }
+        match completed_marker() {
+            Ok(Some(CompletedMarker::Current(marker))) => {
+                // A completed replay is observational. Canonically shaped but semantically
+                // invalid evidence aborts; malformed reads returned by the classifier below do
+                // not panic or create a write.
+                validate_replay(&marker).unwrap_or_else(|error| {
+                    panic!("V13 completed-state verification failed: {error:?}")
+                });
+                return declared_weight();
+            }
+            Ok(Some(CompletedMarker::Legacy(marker))) => {
+                // The bridge is a single storage transaction. Any failed precondition,
+                // transfer, checkpoint or postcondition rolls back transfers, events,
+                // account references and the completion-marker replacement together.
+                return with_transaction(|| {
+                    let result = execute_legacy_bridge(marker);
+                    if result.is_ok() {
+                        TransactionOutcome::Commit(result)
+                    } else {
+                        TransactionOutcome::Rollback(result)
+                    }
+                })
+                .unwrap_or_else(|error| {
+                    panic!("V13 legacy bridge failed and rolled back: {error:?}")
+                });
+            }
+            Err(_) => return declared_weight(),
+            Ok(None) => {}
         }
 
-        let input = issuance_cap::v13_migration_input::<Runtime>()
-            .unwrap_or_else(|| panic!("V13 migration deployment input is absent"));
+        let input =
+            raw_value::<V13MigrationInput<AccountId>, 64>(&issuance_cap::v13_migration_input_key())
+                .unwrap_or_else(|error| panic!("V13 migration input decoding failed: {error:?}"))
+                .unwrap_or_else(|| panic!("V13 migration deployment input is absent"));
         with_transaction(|| {
             let result = execute_pending(input);
             if result.is_ok() {
@@ -1013,20 +1866,34 @@ impl OnRuntimeUpgrade for V13Migration {
 
     #[cfg(feature = "try-runtime")]
     fn pre_upgrade() -> Result<Vec<u8>, TryRuntimeError> {
-        let marker = V13MigrationCompleted::<Runtime>::get();
-        let input = issuance_cap::v13_migration_input::<Runtime>();
-        if let Some(ref completed) = marker {
-            validate_completed(completed)
-                .map_err(|_| TryRuntimeError::Other("invalid completed V13 pre-state"))?;
-        } else {
-            let pending = input.as_ref().ok_or(TryRuntimeError::Other(
-                "V13 deployment input absent in pre-state",
-            ))?;
-            validate_pending(pending)
-                .map_err(|_| TryRuntimeError::Other("invalid pending V13 pre-state"))?;
+        if crate::fresh_genesis::Enabled::<crate::Runtime>::get() {
+            crate::fresh_genesis::validate_lifecycle();
+            return Ok(b"ERA_FRESH_V14_GENESIS".to_vec());
+        }
+        let marker = completed_marker()?;
+        let input = raw_value::<V13MigrationInput<AccountId>, 64>(
+            &issuance_cap::v13_migration_input_key(),
+        )?;
+        match marker.as_ref() {
+            Some(CompletedMarker::Current(completed)) => validate_replay(completed)
+                .map_err(|_| TryRuntimeError::Other("invalid current V13 pre-state"))?,
+            Some(CompletedMarker::Legacy(completed)) => validate_legacy_completed(completed)
+                .map_err(|_| TryRuntimeError::Other("invalid legacy V13 pre-state"))?,
+            None => {
+                let pending = input.as_ref().ok_or(TryRuntimeError::Other(
+                    "V13 deployment input absent in pre-state",
+                ))?;
+                validate_pending(pending)
+                    .map_err(|_| TryRuntimeError::Other("invalid pending V13 pre-state"))?;
+            }
         }
         let liability = reward_liability_summary()
             .map_err(|_| TryRuntimeError::Other("invalid V13 liability pre-state"))?;
+        let legacy_operational = if matches!(&marker, Some(CompletedMarker::Legacy(_))) {
+            Some(operational_account_fingerprint()?)
+        } else {
+            None
+        };
         let state = TryPreState {
             marker,
             input,
@@ -1035,6 +1902,7 @@ impl OnRuntimeUpgrade for V13Migration {
             reward_prefix: storage_prefix_fingerprint(b"RewardReserve")?,
             application_prefixes: application_fingerprints()?,
             preserved_accounts: preserved_account_fingerprint(),
+            legacy_operational,
             liability,
         };
         Ok(state.encode())
@@ -1042,27 +1910,75 @@ impl OnRuntimeUpgrade for V13Migration {
 
     #[cfg(feature = "try-runtime")]
     fn post_upgrade(state: Vec<u8>) -> Result<(), TryRuntimeError> {
+        if crate::fresh_genesis::Enabled::<crate::Runtime>::get() {
+            if state != b"ERA_FRESH_V14_GENESIS" {
+                return Err("fresh-chain upgrade pre-state mismatch".into());
+            }
+            crate::fresh_genesis::validate_lifecycle();
+            return Ok(());
+        }
         let before = TryPreState::decode(&mut &state[..])
             .map_err(|_| TryRuntimeError::Other("invalid encoded V13 pre-state"))?;
-        let marker = V13MigrationCompleted::<Runtime>::get()
-            .ok_or(TryRuntimeError::Other("V13 completion marker absent"))?;
-        validate_completed(&marker)
-            .map_err(|_| TryRuntimeError::Other("invalid completed V13 post-state"))?;
-        if let Some(old_marker) = before.marker {
-            ensure_try(
-                marker == old_marker
-                    && before.input.is_none()
-                    && before.issuance == TARGET_RETAINED_ISSUANCE
-                    && before.allowance == Some(MAXIMUM_POST_CORRECTION_NEW_ISSUANCE),
-                "V13 idempotent state changed",
-            )?;
-        } else {
-            ensure_try(
-                before.issuance == R6R3_PRE_MIGRATION_ISSUANCE
-                    && before.allowance.is_none()
-                    && before.input.as_ref() == Some(&marker.input),
-                "V13 pending-to-complete transition mismatch",
-            )?;
+        let marker =
+            completed_marker()?.ok_or(TryRuntimeError::Other("V13 completion marker absent"))?;
+        match (before.marker, marker) {
+            (Some(CompletedMarker::Current(old)), CompletedMarker::Current(current)) => {
+                validate_replay(&current)
+                    .map_err(|_| TryRuntimeError::Other("invalid V13 replay post-state"))?;
+                ensure_try(
+                    current == old
+                        && before.input.is_none()
+                        && before.issuance == <Balances as Inspect<AccountId>>::total_issuance()
+                        && before.allowance == RemainingAllowance::<Runtime>::get()
+                        && before.legacy_operational.is_none(),
+                    "V13 idempotent state changed",
+                )?;
+            }
+            (Some(CompletedMarker::Legacy(old)), CompletedMarker::Current(current)) => {
+                validate_replay(&current)
+                    .map_err(|_| TryRuntimeError::Other("invalid V13 bridge post-state"))?;
+                let expected = current_marker_from_legacy(&old);
+                ensure_try(
+                    current == expected
+                        && before.input.is_none()
+                        && before.issuance == <Balances as Inspect<AccountId>>::total_issuance()
+                        && before.allowance == RemainingAllowance::<Runtime>::get(),
+                    "V13 legacy-to-current transition mismatch",
+                )?;
+                for destination in legacy_destinations(&old) {
+                    validate_pristine_destination(&destination).map_err(|_| {
+                        TryRuntimeError::Other("V13 legacy destination remains funded")
+                    })?;
+                }
+                let current_destinations = custody_destinations();
+                for (destination, expected) in current_destinations.iter().zip([
+                    PRESALE_TRANSFER,
+                    ECOSYSTEM_3_OF_3_CUSTODY_PRINCIPAL,
+                    LIQUIDITY_TRANSFER,
+                ]) {
+                    validate_plain_account(destination, expected).map_err(|_| {
+                        TryRuntimeError::Other("V13 current custody allocation mismatch")
+                    })?;
+                }
+                validate_operational_accounts()
+                    .map_err(|_| TryRuntimeError::Other("V13 operational allocation changed"))?;
+                ensure_try(
+                    before.legacy_operational == Some(operational_account_fingerprint()?),
+                    "V13 operational account storage changed",
+                )?;
+            }
+            (None, CompletedMarker::Current(current)) => {
+                validate_completed(&current)
+                    .map_err(|_| TryRuntimeError::Other("invalid initial V13 post-state"))?;
+                ensure_try(
+                    before.issuance == R6R3_PRE_MIGRATION_ISSUANCE
+                        && before.allowance.is_none()
+                        && before.input.as_ref() == Some(&current.input)
+                        && before.legacy_operational.is_none(),
+                    "V13 pending-to-complete transition mismatch",
+                )?;
+            }
+            _ => return Err(TryRuntimeError::Other("invalid V13 marker transition")),
         }
         ensure_try(
             before.reward_prefix == storage_prefix_fingerprint(b"RewardReserve")?,
@@ -1083,8 +1999,9 @@ impl OnRuntimeUpgrade for V13Migration {
             "V13 reward liabilities changed",
         )?;
         ensure_try(
-            crate::VERSION.spec_version == 13,
-            "runtime spec version changed",
+            matches!(crate::VERSION.spec_version, 13 | 14 | 15)
+                && crate::VERSION.transaction_version == 1,
+            "unsupported V13 migration execution runtime",
         )?;
         Ok(())
     }
@@ -1093,13 +2010,14 @@ impl OnRuntimeUpgrade for V13Migration {
 #[cfg(feature = "try-runtime")]
 #[derive(Encode, Decode)]
 struct TryPreState {
-    marker: Option<V13Completion<AccountId, BlockNumber>>,
+    marker: Option<CompletedMarker>,
     input: Option<V13MigrationInput<AccountId>>,
     issuance: Balance,
     allowance: Option<Balance>,
     reward_prefix: (u32, [u8; 32]),
     application_prefixes: [(u32, [u8; 32]); 5],
     preserved_accounts: [u8; 32],
+    legacy_operational: Option<[u8; 32]>,
     liability: (u32, Balance, [u8; 32]),
 }
 
@@ -1167,4 +2085,28 @@ fn preserved_account_fingerprint() -> [u8; 32] {
         }
     }
     digest
+}
+
+#[cfg(feature = "try-runtime")]
+fn operational_account_fingerprint() -> Result<[u8; 32], TryRuntimeError> {
+    let accounts = operational_accounts()
+        .map_err(|_| TryRuntimeError::Other("V13 operational identities invalid"))?;
+    let mut digest = [0u8; 32];
+    let sudo_key = pallet_sudo::Key::<Runtime>::hashed_key();
+    digest = sp_io::hashing::blake2_256(
+        &(digest, sudo_key.as_slice(), sp_io::storage::get(&sudo_key)).encode(),
+    );
+    for who in accounts {
+        for key in [
+            frame_system::Account::<Runtime>::hashed_key_for(&who),
+            pallet_balances::Locks::<Runtime>::hashed_key_for(&who),
+            pallet_balances::Reserves::<Runtime>::hashed_key_for(&who),
+            pallet_balances::Holds::<Runtime>::hashed_key_for(&who),
+            pallet_balances::Freezes::<Runtime>::hashed_key_for(&who),
+        ] {
+            let value = sp_io::storage::get(&key);
+            digest = sp_io::hashing::blake2_256(&(digest, key, value).encode());
+        }
+    }
+    Ok(digest)
 }

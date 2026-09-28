@@ -1,0 +1,28 @@
+{
+  "package": "libp2p-quic",
+  "locked_version": "0.11.1",
+  "advisory": "GHSA-5hq8-qhww-jm7q",
+  "upstream_fixed_version": "0.13.1",
+  "fixed_archive_sha256_from_retained_assessment": "9dcc597d70bf7f6f30cbe07081802c836184e48416e89e9ce73a0ba2c56a319e",
+  "advisory_url": "https://github.com/advisories/GHSA-5hq8-qhww-jm7q",
+  "changed_files": [
+    {
+      "path": "LICENSE",
+      "original_sha256": null,
+      "local_sha256": "febd5a85ee5f63f54daf8d365af9dfaabcc1925c3c4f14fb95e4041ada0f13a7"
+    },
+    {
+      "path": "src/connection/connecting.rs",
+      "original_sha256": "cb4e64f128d9053c7cd816ce438bb0d66b4dad11f96c4421d6b8649411058360",
+      "local_sha256": "068ded434d119819aabc9751f0f19ffc79649b47ae889502d81059e5e6e140dc"
+    },
+    {
+      "path": "src/connection/remote_certificate.rs",
+      "original_sha256": null,
+      "local_sha256": "7fe95cac5b6bccda88dde62b8d423ff9123292606773ca71c9966da942b9f311"
+    }
+  ],
+  "method": "Narrow local backport, not an upstream version update",
+  "github_alert_resolved": false,
+  "production_changed": false
+}

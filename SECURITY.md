@@ -1,21 +1,13 @@
-# Security policy
+# Security reporting
 
-This repository is private and contains consensus/runtime source. Do not disclose a suspected
-vulnerability in a public GitHub issue, discussion, pull request, commit message, chat, or public
-security mailing list.
+The canonical source repository is [`erablockchains/era-blockchain`](https://github.com/erablockchains/era-blockchain). Its [private vulnerability reporting route](https://github.com/erablockchains/era-blockchain/security/advisories/new) must be verified after the repository becomes public; current enablement and ordinary-reporter access have not been established. If the private form is unavailable, do not put vulnerability details in public issues or discussions; use an already-established private conversation with the repository owner until the route is verified.
 
-## Private reporting procedure
+Do not disclose vulnerability details in public issues, discussions or pull requests. Do not test against production accounts or send live extrinsics to demonstrate an exploit. Provide the affected revision, component, impact, a minimal synthetic reproduction and possible mitigations privately. Never send real seeds, private keys, credentials, production keystores or database extracts.
 
-1. If you have repository security permission, create a private draft advisory at
-   `https://github.com/erablockchains/era-blockchain/security/advisories/new`.
-2. If that private advisory form is unavailable, contact an `erablockchains` organization owner
-   through the pre-agreed private channel and request a private advisory. Do not include exploit
-   details in the access request.
-3. In the advisory, include the affected commit and files, impact, prerequisites, a minimal
-   reproduction that uses no production secrets or live-chain action, and a proposed mitigation if
-   known.
-4. Do not test against ERA-MAINNET, RPC3, validators, production wallets, production node databases,
-   or custody/signing systems. Use an isolated local test environment with synthetic keys and state.
+This is V14 completion development source extending the deployed fresh-chain release; it is not the source identity of a deployed upgrade. Scope includes consensus, monetary accounting, custody/origins, storage/weights, node/RPC, dependencies and build provenance. Independent security-audit completion is not claimed. No email address, response-time commitment or bug-bounty promise is supplied.
 
-No response time, bounty, embargo, or disclosure date is promised by this baseline. Coordinate all
-disclosure decisions privately with the repository owner.
+No repository settings, notifications or test reports were changed or submitted during preparation. Existing production monitoring remains server-local and is separate from vulnerability reporting.
+
+Status after authenticated review on 28 September 2026: the canonical repository is private, has no classic branch protection and has no ruleset; the reviewing account has administrator access. Private vulnerability-reporting enablement and ordinary-reporter access are not established. GitHub Private Vulnerability Reporting is a public-repository feature separate from this policy. Administrator permission does not prove ordinary-reporter form access. After full V14 completion and explicitly authorized publication, verify or enable the feature as authorized and inspect the form as an ordinary signed-in non-admin reporter without submitting a report. No visibility, reporting setting or notification changed during preparation.
+
+Two public dependency advisories match retained lockfile versions; see the [dated advisory status](docs/DEPENDENCY-ADVISORIES-20260919.md). A lockfile match does not alone establish deployed exploitability, and partial static reachability checks do not clear the advisories. No production exploit test was performed.

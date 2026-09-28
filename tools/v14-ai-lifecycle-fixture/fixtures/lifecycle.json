@@ -1,0 +1,79 @@
+{
+  "fixture_only": true,
+  "model_json": "{\"execution\":\"off-chain Python standard library\",\"name\":\"synthetic-moving-average\",\"rule\":\"sum(samples) >= threshold * len(samples)\",\"trained\":false,\"version\":\"fixture-v1\"}",
+  "model_sha256": "d26c21a9d410ef82ff909c46afa73fb7ca82cefe52d6867bd31da559b5336968",
+  "cases": [
+    {
+      "name": "correct",
+      "prediction_json": "{\"confidence\":75,\"confidence_is_calibrated\":false,\"fixture_only\":true,\"inputs\":{\"forecast_block\":120,\"samples\":[12,14,16],\"threshold\":13,\"unit\":\"synthetic units\"},\"model_sha256\":\"d26c21a9d410ef82ff909c46afa73fb7ca82cefe52d6867bd31da559b5336968\",\"model_version\":\"fixture-v1\",\"reported_output\":true,\"resolution_rule\":\"realized >= threshold\",\"schema\":\"era-ai-fixture-v1\"}",
+      "prediction_sha256": "a24fe25eec5f04950090dde0159b127a55c9556ef3fd3e68b5f31e44d82c71a3",
+      "observation_json": "{\"actual_event\":true,\"fixture_only\":true,\"realized\":16,\"threshold\":13}",
+      "witness_json": "{\"challenge_document_sha256\":\"3edf22b986144f4e4321c46418a2cdb8bf5fbef36dc5aa956f3e20e054dd60a3\",\"challenge_matches_reference\":true,\"forecast_correct\":true,\"fraudulent_dispute_fixture\":false,\"model_execution_claim_consistent\":true,\"observation_sha256\":\"3edf22b986144f4e4321c46418a2cdb8bf5fbef36dc5aa956f3e20e054dd60a3\",\"prediction_sha256\":\"a24fe25eec5f04950090dde0159b127a55c9556ef3fd3e68b5f31e44d82c71a3\",\"recomputed_model_output\":true,\"reference_observation_sha256\":\"3edf22b986144f4e4321c46418a2cdb8bf5fbef36dc5aa956f3e20e054dd60a3\",\"reported_model_output\":true}",
+      "evidence_sha256": "28d9422519ea579f818b2372ff0cc498d3adf634619ad4401862d2dbc0b838dd",
+      "model_execution_claim_consistent": true,
+      "forecast_correct": true,
+      "challenge_json": "{\"actual_event\":true,\"fixture_only\":true,\"realized\":16,\"threshold\":13}",
+      "challenge_matches_reference": true
+    },
+    {
+      "name": "incorrect",
+      "prediction_json": "{\"confidence\":75,\"confidence_is_calibrated\":false,\"fixture_only\":true,\"inputs\":{\"forecast_block\":120,\"samples\":[12,14,16],\"threshold\":13,\"unit\":\"synthetic units\"},\"model_sha256\":\"d26c21a9d410ef82ff909c46afa73fb7ca82cefe52d6867bd31da559b5336968\",\"model_version\":\"fixture-v1\",\"reported_output\":true,\"resolution_rule\":\"realized >= threshold\",\"schema\":\"era-ai-fixture-v1\"}",
+      "prediction_sha256": "a24fe25eec5f04950090dde0159b127a55c9556ef3fd3e68b5f31e44d82c71a3",
+      "observation_json": "{\"actual_event\":false,\"fixture_only\":true,\"realized\":8,\"threshold\":13}",
+      "witness_json": "{\"challenge_document_sha256\":\"71c7f85ad2c0230fae17807b95d28bb129f97d45084c443383c76ffda09e0faa\",\"challenge_matches_reference\":true,\"forecast_correct\":false,\"fraudulent_dispute_fixture\":false,\"model_execution_claim_consistent\":true,\"observation_sha256\":\"71c7f85ad2c0230fae17807b95d28bb129f97d45084c443383c76ffda09e0faa\",\"prediction_sha256\":\"a24fe25eec5f04950090dde0159b127a55c9556ef3fd3e68b5f31e44d82c71a3\",\"recomputed_model_output\":true,\"reference_observation_sha256\":\"71c7f85ad2c0230fae17807b95d28bb129f97d45084c443383c76ffda09e0faa\",\"reported_model_output\":true}",
+      "evidence_sha256": "1fedb3660ae39c13d213a64decc01402e1e3aec15993e7dc771d974c58afae86",
+      "model_execution_claim_consistent": true,
+      "forecast_correct": false,
+      "challenge_json": "{\"actual_event\":false,\"fixture_only\":true,\"realized\":8,\"threshold\":13}",
+      "challenge_matches_reference": true
+    },
+    {
+      "name": "good_faith_rejected",
+      "prediction_json": "{\"confidence\":75,\"confidence_is_calibrated\":false,\"fixture_only\":true,\"inputs\":{\"forecast_block\":120,\"samples\":[12,14,16],\"threshold\":13,\"unit\":\"synthetic units\"},\"model_sha256\":\"d26c21a9d410ef82ff909c46afa73fb7ca82cefe52d6867bd31da559b5336968\",\"model_version\":\"fixture-v1\",\"reported_output\":true,\"resolution_rule\":\"realized >= threshold\",\"schema\":\"era-ai-fixture-v1\"}",
+      "prediction_sha256": "a24fe25eec5f04950090dde0159b127a55c9556ef3fd3e68b5f31e44d82c71a3",
+      "observation_json": "{\"actual_event\":true,\"fixture_only\":true,\"realized\":16,\"threshold\":13}",
+      "witness_json": "{\"challenge_document_sha256\":\"3edf22b986144f4e4321c46418a2cdb8bf5fbef36dc5aa956f3e20e054dd60a3\",\"challenge_matches_reference\":true,\"forecast_correct\":true,\"fraudulent_dispute_fixture\":false,\"model_execution_claim_consistent\":true,\"observation_sha256\":\"3edf22b986144f4e4321c46418a2cdb8bf5fbef36dc5aa956f3e20e054dd60a3\",\"prediction_sha256\":\"a24fe25eec5f04950090dde0159b127a55c9556ef3fd3e68b5f31e44d82c71a3\",\"recomputed_model_output\":true,\"reference_observation_sha256\":\"3edf22b986144f4e4321c46418a2cdb8bf5fbef36dc5aa956f3e20e054dd60a3\",\"reported_model_output\":true}",
+      "evidence_sha256": "28d9422519ea579f818b2372ff0cc498d3adf634619ad4401862d2dbc0b838dd",
+      "model_execution_claim_consistent": true,
+      "forecast_correct": true,
+      "challenge_json": "{\"actual_event\":true,\"fixture_only\":true,\"realized\":16,\"threshold\":13}",
+      "challenge_matches_reference": true
+    },
+    {
+      "name": "prediction_fraud",
+      "prediction_json": "{\"confidence\":75,\"confidence_is_calibrated\":false,\"fixture_only\":true,\"inputs\":{\"forecast_block\":120,\"samples\":[12,14,16],\"threshold\":13,\"unit\":\"synthetic units\"},\"model_sha256\":\"d26c21a9d410ef82ff909c46afa73fb7ca82cefe52d6867bd31da559b5336968\",\"model_version\":\"fixture-v1\",\"reported_output\":false,\"resolution_rule\":\"realized >= threshold\",\"schema\":\"era-ai-fixture-v1\"}",
+      "prediction_sha256": "5125e2920a383ad631a0fcf4cda2d2705eccb466f2fd49e71b8b6666d7149ca0",
+      "observation_json": "{\"actual_event\":true,\"fixture_only\":true,\"realized\":16,\"threshold\":13}",
+      "witness_json": "{\"challenge_document_sha256\":\"3edf22b986144f4e4321c46418a2cdb8bf5fbef36dc5aa956f3e20e054dd60a3\",\"challenge_matches_reference\":true,\"forecast_correct\":false,\"fraudulent_dispute_fixture\":false,\"model_execution_claim_consistent\":false,\"observation_sha256\":\"3edf22b986144f4e4321c46418a2cdb8bf5fbef36dc5aa956f3e20e054dd60a3\",\"prediction_sha256\":\"5125e2920a383ad631a0fcf4cda2d2705eccb466f2fd49e71b8b6666d7149ca0\",\"recomputed_model_output\":true,\"reference_observation_sha256\":\"3edf22b986144f4e4321c46418a2cdb8bf5fbef36dc5aa956f3e20e054dd60a3\",\"reported_model_output\":false}",
+      "evidence_sha256": "152270df12490150375695b15d99416246971093ddab313746888dd36c61958d",
+      "model_execution_claim_consistent": false,
+      "forecast_correct": false,
+      "challenge_json": "{\"actual_event\":true,\"fixture_only\":true,\"realized\":16,\"threshold\":13}",
+      "challenge_matches_reference": true
+    },
+    {
+      "name": "fraudulent_dispute",
+      "prediction_json": "{\"confidence\":75,\"confidence_is_calibrated\":false,\"fixture_only\":true,\"inputs\":{\"forecast_block\":120,\"samples\":[12,14,16],\"threshold\":13,\"unit\":\"synthetic units\"},\"model_sha256\":\"d26c21a9d410ef82ff909c46afa73fb7ca82cefe52d6867bd31da559b5336968\",\"model_version\":\"fixture-v1\",\"reported_output\":true,\"resolution_rule\":\"realized >= threshold\",\"schema\":\"era-ai-fixture-v1\"}",
+      "prediction_sha256": "a24fe25eec5f04950090dde0159b127a55c9556ef3fd3e68b5f31e44d82c71a3",
+      "observation_json": "{\"actual_event\":true,\"fixture_only\":true,\"realized\":16,\"threshold\":13}",
+      "witness_json": "{\"challenge_document_sha256\":\"71c7f85ad2c0230fae17807b95d28bb129f97d45084c443383c76ffda09e0faa\",\"challenge_matches_reference\":false,\"forecast_correct\":true,\"fraudulent_dispute_fixture\":true,\"model_execution_claim_consistent\":true,\"observation_sha256\":\"3edf22b986144f4e4321c46418a2cdb8bf5fbef36dc5aa956f3e20e054dd60a3\",\"prediction_sha256\":\"a24fe25eec5f04950090dde0159b127a55c9556ef3fd3e68b5f31e44d82c71a3\",\"recomputed_model_output\":true,\"reference_observation_sha256\":\"3edf22b986144f4e4321c46418a2cdb8bf5fbef36dc5aa956f3e20e054dd60a3\",\"reported_model_output\":true}",
+      "evidence_sha256": "cd99c0a1631d4e19e5f636751a169419677e461bfb01812af364d48a8644b125",
+      "model_execution_claim_consistent": true,
+      "forecast_correct": true,
+      "challenge_json": "{\"actual_event\":false,\"fixture_only\":true,\"realized\":8,\"threshold\":13}",
+      "challenge_matches_reference": false
+    },
+    {
+      "name": "no_winner",
+      "prediction_json": "{\"confidence\":75,\"confidence_is_calibrated\":false,\"fixture_only\":true,\"inputs\":{\"forecast_block\":120,\"samples\":[12,14,16],\"threshold\":13,\"unit\":\"synthetic units\"},\"model_sha256\":\"d26c21a9d410ef82ff909c46afa73fb7ca82cefe52d6867bd31da559b5336968\",\"model_version\":\"fixture-v1\",\"reported_output\":true,\"resolution_rule\":\"realized >= threshold\",\"schema\":\"era-ai-fixture-v1\"}",
+      "prediction_sha256": "a24fe25eec5f04950090dde0159b127a55c9556ef3fd3e68b5f31e44d82c71a3",
+      "observation_json": "{\"actual_event\":true,\"fixture_only\":true,\"realized\":16,\"threshold\":13}",
+      "witness_json": "{\"challenge_document_sha256\":\"3edf22b986144f4e4321c46418a2cdb8bf5fbef36dc5aa956f3e20e054dd60a3\",\"challenge_matches_reference\":true,\"forecast_correct\":true,\"fraudulent_dispute_fixture\":false,\"model_execution_claim_consistent\":true,\"observation_sha256\":\"3edf22b986144f4e4321c46418a2cdb8bf5fbef36dc5aa956f3e20e054dd60a3\",\"prediction_sha256\":\"a24fe25eec5f04950090dde0159b127a55c9556ef3fd3e68b5f31e44d82c71a3\",\"recomputed_model_output\":true,\"reference_observation_sha256\":\"3edf22b986144f4e4321c46418a2cdb8bf5fbef36dc5aa956f3e20e054dd60a3\",\"reported_model_output\":true}",
+      "evidence_sha256": "28d9422519ea579f818b2372ff0cc498d3adf634619ad4401862d2dbc0b838dd",
+      "model_execution_claim_consistent": true,
+      "forecast_correct": true,
+      "challenge_json": "{\"actual_event\":true,\"fixture_only\":true,\"realized\":16,\"threshold\":13}",
+      "challenge_matches_reference": true
+    }
+  ]
+}

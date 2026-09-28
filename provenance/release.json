@@ -1,0 +1,56 @@
+{
+  "baseline": {
+    "kind": "verified export, not canonical Git checkout",
+    "commit": "b5d0476efaaebd98290d5bf6e32da8c3e915c782",
+    "tree": "21c3add55e9961e91452dccd3bfae56ff0db3c5a",
+    "verified_files": 1666,
+    "manifest_sha256": "e0f8e999c46ddcaddec27c81d37a7f67be2607d6524d242afb4361f43ce8e960"
+  },
+  "baseline_is_canonical_checkout": false,
+  "patches": [
+    {
+      "path": "provenance/fresh-relaunch.patch",
+      "sha256": "591d5b4e0e16c6c2ebd6ea1d7caee8d27d6ca0034a70bf649a65e358c8622d4a"
+    },
+    {
+      "path": "provenance/principal-first-r3.patch",
+      "sha256": "6447af344e23dd3ebb469c920fb5d5e34bc32d2679892f27a1c325df7d67b170"
+    }
+  ],
+  "reconstruction_all_selected_source_bytes_match": true,
+  "source_inventory_sha256": "4f5982eb705aab73e4d14a1770b1e1442d15373eec416839b5bc06bd40486fc1",
+  "sdk_commit": "f3969c7ddd34985e6e709ed458bcc519f651682a",
+  "rust": "1.87.0",
+  "node_sha256": "d1e70bc2c5720cde0b5a3801ea7c0b06736fb38738fc2cd9aaa2cdcd1dc92fba",
+  "compressed_wasm_sha256": "03f75d7bbc144ba33f7866f5217499275c285ad618da7712bbf888a5ad2eb584",
+  "raw_spec_sha256": "0c5bf71c53e9b15391245fc072db517a414904798449b7710f12cd0109d041f5",
+  "release_manifest_sha256": "e77e3f74fb56677fefc0db70a43fb289d0680c0e4e110bec24a16fcaf5b10f2a",
+  "production_genesis": "0x0abc2c3d8db5815541050b73da4d81267ebf14d90dbee8d7258155b667ea112e",
+  "new_build_performed": false,
+  "new_signed_tag_created": false,
+  "history_policy": "New isolated source snapshot; no private historical Git objects imported",
+  "destination": "erablockchains/era-blockchain",
+  "deployed_source_inventory_sha256": "7d7466a2ef71d808614cfd05d6c3dd7dac3ab8c53337438945f2ee89570993ab",
+  "publication_comment_document_redactions": [
+    {
+      "path": "pallets/validator-security/src/weights.rs",
+      "original_sha256": "da9895666786746099f4ad7e1b6fa70b8d91fabefac8196ebeb9e03166c58a05",
+      "candidate_sha256": "afbc7e826f720daff0435e12c39cde68f1a64cfcda1c6ad0f0b804de905eecde",
+      "change": "Historical benchmark path/hostname redaction in comments/documentation only; executable tokens unchanged"
+    },
+    {
+      "path": "pallets/nfts/PROVENANCE.md",
+      "original_sha256": "d54ab832195e5637da3ba92c15e981ee64ffe4ee08ae5dd481513a11053d63c3",
+      "candidate_sha256": "9a1db1e9c1a7dfa8aaff71858302677b0f73a0cc7c74493cceb94a655fa435e6",
+      "change": "Historical benchmark path/hostname redaction in comments/documentation only; executable tokens unchanged"
+    },
+    {
+      "path": "pallets/custody-governance/README.md",
+      "original_sha256": "c2c5f8a282b947aa41bd5059835091d673f790e82985a8f57290e77ceb17b227",
+      "candidate_sha256": "2e41e3179108b8b6548f09f814deb972e77f27365d56dd4cf33c44f56e4d6947",
+      "change": "Replace superseded historical migration/release statements with confirmed fresh-genesis custody status; documentation only"
+    }
+  ],
+  "compiled_source_tokens_unchanged": true,
+  "document_scope": "Historical initial deployed spec14 release evidence. Current completion source differs; see completion-development.json and the current SOURCE-SHA256SUMS. Old artifact hashes and approvals here are not new candidate deployment."
+}

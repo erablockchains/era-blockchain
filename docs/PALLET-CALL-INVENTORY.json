@@ -1,0 +1,1028 @@
+[
+  {
+    "name": "System",
+    "index": 0,
+    "calls": [
+      {
+        "name": "remark",
+        "index": 0
+      },
+      {
+        "name": "set_heap_pages",
+        "index": 1
+      },
+      {
+        "name": "set_code",
+        "index": 2
+      },
+      {
+        "name": "set_code_without_checks",
+        "index": 3
+      },
+      {
+        "name": "set_storage",
+        "index": 4
+      },
+      {
+        "name": "kill_storage",
+        "index": 5
+      },
+      {
+        "name": "kill_prefix",
+        "index": 6
+      },
+      {
+        "name": "remark_with_event",
+        "index": 7
+      },
+      {
+        "name": "authorize_upgrade",
+        "index": 9
+      },
+      {
+        "name": "authorize_upgrade_without_checks",
+        "index": 10
+      },
+      {
+        "name": "apply_authorized_upgrade",
+        "index": 11
+      }
+    ]
+  },
+  {
+    "name": "Timestamp",
+    "index": 1,
+    "calls": [
+      {
+        "name": "set",
+        "index": 0
+      }
+    ]
+  },
+  {
+    "name": "Balances",
+    "index": 2,
+    "calls": [
+      {
+        "name": "transfer_allow_death",
+        "index": 0
+      },
+      {
+        "name": "force_transfer",
+        "index": 2
+      },
+      {
+        "name": "transfer_keep_alive",
+        "index": 3
+      },
+      {
+        "name": "transfer_all",
+        "index": 4
+      },
+      {
+        "name": "force_unreserve",
+        "index": 5
+      },
+      {
+        "name": "upgrade_accounts",
+        "index": 6
+      },
+      {
+        "name": "force_set_balance",
+        "index": 8
+      },
+      {
+        "name": "force_adjust_total_issuance",
+        "index": 9
+      },
+      {
+        "name": "burn",
+        "index": 10
+      }
+    ]
+  },
+  {
+    "name": "TransactionPayment",
+    "index": 3,
+    "calls": []
+  },
+  {
+    "name": "Sudo",
+    "index": 4,
+    "calls": [
+      {
+        "name": "sudo",
+        "index": 0
+      },
+      {
+        "name": "sudo_unchecked_weight",
+        "index": 1
+      },
+      {
+        "name": "set_key",
+        "index": 2
+      },
+      {
+        "name": "sudo_as",
+        "index": 3
+      },
+      {
+        "name": "remove_key",
+        "index": 4
+      }
+    ]
+  },
+  {
+    "name": "Staking",
+    "index": 10,
+    "calls": [
+      {
+        "name": "bond",
+        "index": 0
+      },
+      {
+        "name": "bond_extra",
+        "index": 1
+      },
+      {
+        "name": "unbond",
+        "index": 2
+      },
+      {
+        "name": "withdraw_unbonded",
+        "index": 3
+      },
+      {
+        "name": "validate",
+        "index": 4
+      },
+      {
+        "name": "nominate",
+        "index": 5
+      },
+      {
+        "name": "chill",
+        "index": 6
+      },
+      {
+        "name": "set_payee",
+        "index": 7
+      },
+      {
+        "name": "set_controller",
+        "index": 8
+      },
+      {
+        "name": "set_validator_count",
+        "index": 9
+      },
+      {
+        "name": "increase_validator_count",
+        "index": 10
+      },
+      {
+        "name": "scale_validator_count",
+        "index": 11
+      },
+      {
+        "name": "force_no_eras",
+        "index": 12
+      },
+      {
+        "name": "force_new_era",
+        "index": 13
+      },
+      {
+        "name": "set_invulnerables",
+        "index": 14
+      },
+      {
+        "name": "force_unstake",
+        "index": 15
+      },
+      {
+        "name": "force_new_era_always",
+        "index": 16
+      },
+      {
+        "name": "cancel_deferred_slash",
+        "index": 17
+      },
+      {
+        "name": "payout_stakers",
+        "index": 18
+      },
+      {
+        "name": "rebond",
+        "index": 19
+      },
+      {
+        "name": "reap_stash",
+        "index": 20
+      },
+      {
+        "name": "kick",
+        "index": 21
+      },
+      {
+        "name": "set_staking_configs",
+        "index": 22
+      },
+      {
+        "name": "chill_other",
+        "index": 23
+      },
+      {
+        "name": "force_apply_min_commission",
+        "index": 24
+      },
+      {
+        "name": "set_min_commission",
+        "index": 25
+      },
+      {
+        "name": "payout_stakers_by_page",
+        "index": 26
+      },
+      {
+        "name": "update_payee",
+        "index": 27
+      },
+      {
+        "name": "deprecate_controller_batch",
+        "index": 28
+      },
+      {
+        "name": "restore_ledger",
+        "index": 29
+      },
+      {
+        "name": "migrate_currency",
+        "index": 30
+      },
+      {
+        "name": "manual_slash",
+        "index": 33
+      }
+    ]
+  },
+  {
+    "name": "Session",
+    "index": 5,
+    "calls": [
+      {
+        "name": "set_keys",
+        "index": 0
+      },
+      {
+        "name": "purge_keys",
+        "index": 1
+      }
+    ]
+  },
+  {
+    "name": "Historical",
+    "index": 6,
+    "calls": []
+  },
+  {
+    "name": "Babe",
+    "index": 7,
+    "calls": [
+      {
+        "name": "report_equivocation",
+        "index": 0
+      },
+      {
+        "name": "report_equivocation_unsigned",
+        "index": 1
+      },
+      {
+        "name": "plan_config_change",
+        "index": 2
+      }
+    ]
+  },
+  {
+    "name": "Grandpa",
+    "index": 8,
+    "calls": [
+      {
+        "name": "report_equivocation",
+        "index": 0
+      },
+      {
+        "name": "report_equivocation_unsigned",
+        "index": 1
+      },
+      {
+        "name": "note_stalled",
+        "index": 2
+      }
+    ]
+  },
+  {
+    "name": "Authorship",
+    "index": 9,
+    "calls": []
+  },
+  {
+    "name": "Vesting",
+    "index": 11,
+    "calls": [
+      {
+        "name": "vest",
+        "index": 0
+      },
+      {
+        "name": "vest_other",
+        "index": 1
+      },
+      {
+        "name": "vested_transfer",
+        "index": 2
+      },
+      {
+        "name": "force_vested_transfer",
+        "index": 3
+      },
+      {
+        "name": "merge_schedules",
+        "index": 4
+      },
+      {
+        "name": "force_remove_vesting_schedule",
+        "index": 5
+      }
+    ]
+  },
+  {
+    "name": "AiPredictions",
+    "index": 12,
+    "calls": [
+      {
+        "name": "register_model",
+        "index": 0
+      },
+      {
+        "name": "update_model",
+        "index": 1
+      },
+      {
+        "name": "submit_prediction",
+        "index": 2
+      },
+      {
+        "name": "validate_prediction",
+        "index": 3
+      },
+      {
+        "name": "close_prediction",
+        "index": 4
+      },
+      {
+        "name": "authorize_validator",
+        "index": 5
+      },
+      {
+        "name": "remove_validator",
+        "index": 6
+      },
+      {
+        "name": "set_tokenization_config",
+        "index": 7
+      },
+      {
+        "name": "tokenize_prediction",
+        "index": 8
+      },
+      {
+        "name": "approve_prediction_token_transfer",
+        "index": 9
+      },
+      {
+        "name": "revoke_prediction_token_approval",
+        "index": 10
+      },
+      {
+        "name": "transfer_prediction_token",
+        "index": 11
+      },
+      {
+        "name": "freeze_prediction_token",
+        "index": 12
+      },
+      {
+        "name": "unfreeze_prediction_token",
+        "index": 13
+      },
+      {
+        "name": "burn_prediction_token",
+        "index": 14
+      },
+      {
+        "name": "update_prediction_token_metadata",
+        "index": 15
+      },
+      {
+        "name": "set_staking_config",
+        "index": 16
+      },
+      {
+        "name": "stake_on_prediction_token",
+        "index": 17
+      },
+      {
+        "name": "unstake_prediction_token",
+        "index": 18
+      },
+      {
+        "name": "lock_prediction_token_stake",
+        "index": 19
+      },
+      {
+        "name": "release_prediction_token_stake",
+        "index": 20
+      },
+      {
+        "name": "set_settlement_config",
+        "index": 21
+      },
+      {
+        "name": "propose_prediction_outcome",
+        "index": 22
+      },
+      {
+        "name": "dispute_prediction_outcome",
+        "index": 23
+      },
+      {
+        "name": "admin_finalize_prediction_outcome",
+        "index": 24
+      },
+      {
+        "name": "finalize_prediction_outcome_after_dispute_window",
+        "index": 25
+      },
+      {
+        "name": "cancel_prediction_settlement",
+        "index": 26
+      },
+      {
+        "name": "set_settlement_economics_config",
+        "index": 27
+      },
+      {
+        "name": "claim_prediction_token_settlement",
+        "index": 28
+      },
+      {
+        "name": "resolve_prediction_dispute_bond",
+        "index": 29
+      },
+      {
+        "name": "set_market_economics_config",
+        "index": 30
+      },
+      {
+        "name": "stake_on_prediction_outcome_side",
+        "index": 31
+      },
+      {
+        "name": "unstake_from_prediction_outcome_side",
+        "index": 32
+      },
+      {
+        "name": "claim_prediction_market_payout",
+        "index": 33
+      },
+      {
+        "name": "set_market_fee_config",
+        "index": 34
+      },
+      {
+        "name": "set_model_onboarding_config",
+        "index": 35
+      },
+      {
+        "name": "approve_model",
+        "index": 36
+      },
+      {
+        "name": "suspend_model",
+        "index": 37
+      },
+      {
+        "name": "reject_model",
+        "index": 38
+      },
+      {
+        "name": "set_model_submitter",
+        "index": 39
+      }
+    ]
+  },
+  {
+    "name": "RewardReserve",
+    "index": 13,
+    "calls": [
+      {
+        "name": "claim_reward_page",
+        "index": 0
+      },
+      {
+        "name": "sync_reward_pot",
+        "index": 1
+      },
+      {
+        "name": "set_fee_routing_configuration",
+        "index": 2
+      },
+      {
+        "name": "spend_ecosystem_treasury",
+        "index": 3
+      },
+      {
+        "name": "activate_rewards_and_fee_routing",
+        "index": 4
+      },
+      {
+        "name": "retry_deferred_fee_routing",
+        "index": 5
+      },
+      {
+        "name": "retry_deferred_author_tip",
+        "index": 6
+      },
+      {
+        "name": "cancel_legacy_zero_point_liability",
+        "index": 7
+      }
+    ]
+  },
+  {
+    "name": "Multisig",
+    "index": 14,
+    "calls": [
+      {
+        "name": "as_multi_threshold_1",
+        "index": 0
+      },
+      {
+        "name": "as_multi",
+        "index": 1
+      },
+      {
+        "name": "approve_as_multi",
+        "index": 2
+      },
+      {
+        "name": "cancel_as_multi",
+        "index": 3
+      },
+      {
+        "name": "poke_deposit",
+        "index": 4
+      }
+    ]
+  },
+  {
+    "name": "Proxy",
+    "index": 15,
+    "calls": [
+      {
+        "name": "proxy",
+        "index": 0
+      },
+      {
+        "name": "add_proxy",
+        "index": 1
+      },
+      {
+        "name": "remove_proxy",
+        "index": 2
+      },
+      {
+        "name": "remove_proxies",
+        "index": 3
+      },
+      {
+        "name": "create_pure",
+        "index": 4
+      },
+      {
+        "name": "kill_pure",
+        "index": 5
+      },
+      {
+        "name": "announce",
+        "index": 6
+      },
+      {
+        "name": "remove_announcement",
+        "index": 7
+      },
+      {
+        "name": "reject_announcement",
+        "index": 8
+      },
+      {
+        "name": "proxy_announced",
+        "index": 9
+      },
+      {
+        "name": "poke_deposit",
+        "index": 10
+      }
+    ]
+  },
+  {
+    "name": "Assets",
+    "index": 16,
+    "calls": [
+      {
+        "name": "create",
+        "index": 0
+      },
+      {
+        "name": "force_create",
+        "index": 1
+      },
+      {
+        "name": "start_destroy",
+        "index": 2
+      },
+      {
+        "name": "destroy_accounts",
+        "index": 3
+      },
+      {
+        "name": "destroy_approvals",
+        "index": 4
+      },
+      {
+        "name": "finish_destroy",
+        "index": 5
+      },
+      {
+        "name": "mint",
+        "index": 6
+      },
+      {
+        "name": "burn",
+        "index": 7
+      },
+      {
+        "name": "transfer",
+        "index": 8
+      },
+      {
+        "name": "transfer_keep_alive",
+        "index": 9
+      },
+      {
+        "name": "force_transfer",
+        "index": 10
+      },
+      {
+        "name": "freeze",
+        "index": 11
+      },
+      {
+        "name": "thaw",
+        "index": 12
+      },
+      {
+        "name": "freeze_asset",
+        "index": 13
+      },
+      {
+        "name": "thaw_asset",
+        "index": 14
+      },
+      {
+        "name": "transfer_ownership",
+        "index": 15
+      },
+      {
+        "name": "set_team",
+        "index": 16
+      },
+      {
+        "name": "set_metadata",
+        "index": 17
+      },
+      {
+        "name": "clear_metadata",
+        "index": 18
+      },
+      {
+        "name": "force_set_metadata",
+        "index": 19
+      },
+      {
+        "name": "force_clear_metadata",
+        "index": 20
+      },
+      {
+        "name": "force_asset_status",
+        "index": 21
+      },
+      {
+        "name": "approve_transfer",
+        "index": 22
+      },
+      {
+        "name": "cancel_approval",
+        "index": 23
+      },
+      {
+        "name": "force_cancel_approval",
+        "index": 24
+      },
+      {
+        "name": "transfer_approved",
+        "index": 25
+      },
+      {
+        "name": "touch",
+        "index": 26
+      },
+      {
+        "name": "refund",
+        "index": 27
+      },
+      {
+        "name": "set_min_balance",
+        "index": 28
+      },
+      {
+        "name": "touch_other",
+        "index": 29
+      },
+      {
+        "name": "refund_other",
+        "index": 30
+      },
+      {
+        "name": "block",
+        "index": 31
+      },
+      {
+        "name": "transfer_all",
+        "index": 32
+      }
+    ]
+  },
+  {
+    "name": "Nfts",
+    "index": 17,
+    "calls": [
+      {
+        "name": "create",
+        "index": 0
+      },
+      {
+        "name": "force_create",
+        "index": 1
+      },
+      {
+        "name": "destroy",
+        "index": 2
+      },
+      {
+        "name": "mint",
+        "index": 3
+      },
+      {
+        "name": "force_mint",
+        "index": 4
+      },
+      {
+        "name": "burn",
+        "index": 5
+      },
+      {
+        "name": "transfer",
+        "index": 6
+      },
+      {
+        "name": "redeposit",
+        "index": 7
+      },
+      {
+        "name": "lock_item_transfer",
+        "index": 8
+      },
+      {
+        "name": "unlock_item_transfer",
+        "index": 9
+      },
+      {
+        "name": "lock_collection",
+        "index": 10
+      },
+      {
+        "name": "transfer_ownership",
+        "index": 11
+      },
+      {
+        "name": "set_team",
+        "index": 12
+      },
+      {
+        "name": "force_collection_owner",
+        "index": 13
+      },
+      {
+        "name": "force_collection_config",
+        "index": 14
+      },
+      {
+        "name": "approve_transfer",
+        "index": 15
+      },
+      {
+        "name": "cancel_approval",
+        "index": 16
+      },
+      {
+        "name": "clear_all_transfer_approvals",
+        "index": 17
+      },
+      {
+        "name": "lock_item_properties",
+        "index": 18
+      },
+      {
+        "name": "set_attribute",
+        "index": 19
+      },
+      {
+        "name": "force_set_attribute",
+        "index": 20
+      },
+      {
+        "name": "clear_attribute",
+        "index": 21
+      },
+      {
+        "name": "approve_item_attributes",
+        "index": 22
+      },
+      {
+        "name": "cancel_item_attributes_approval",
+        "index": 23
+      },
+      {
+        "name": "set_metadata",
+        "index": 24
+      },
+      {
+        "name": "clear_metadata",
+        "index": 25
+      },
+      {
+        "name": "set_collection_metadata",
+        "index": 26
+      },
+      {
+        "name": "clear_collection_metadata",
+        "index": 27
+      },
+      {
+        "name": "set_accept_ownership",
+        "index": 28
+      },
+      {
+        "name": "set_collection_max_supply",
+        "index": 29
+      },
+      {
+        "name": "update_mint_settings",
+        "index": 30
+      },
+      {
+        "name": "set_price",
+        "index": 31
+      },
+      {
+        "name": "buy_item",
+        "index": 32
+      },
+      {
+        "name": "pay_tips",
+        "index": 33
+      },
+      {
+        "name": "create_swap",
+        "index": 34
+      },
+      {
+        "name": "cancel_swap",
+        "index": 35
+      },
+      {
+        "name": "claim_swap",
+        "index": 36
+      },
+      {
+        "name": "mint_pre_signed",
+        "index": 37
+      },
+      {
+        "name": "set_attributes_pre_signed",
+        "index": 38
+      },
+      {
+        "name": "start_collection_retirement",
+        "index": 39
+      },
+      {
+        "name": "continue_collection_retirement",
+        "index": 40
+      },
+      {
+        "name": "continue_delegate_cleanup",
+        "index": 41
+      }
+    ]
+  },
+  {
+    "name": "EraWorlds",
+    "index": 18,
+    "calls": [
+      {
+        "name": "register_world",
+        "index": 0
+      },
+      {
+        "name": "update_commitment",
+        "index": 1
+      },
+      {
+        "name": "deregister_world",
+        "index": 2
+      },
+      {
+        "name": "admin_remove_world",
+        "index": 3
+      },
+      {
+        "name": "pause",
+        "index": 4
+      },
+      {
+        "name": "unpause",
+        "index": 5
+      }
+    ]
+  },
+  {
+    "name": "IssuanceCap",
+    "index": 19,
+    "calls": []
+  },
+  {
+    "name": "SecurityBudget",
+    "index": 20,
+    "calls": [
+      {
+        "name": "activate",
+        "index": 0
+      },
+      {
+        "name": "claim_reward_page",
+        "index": 1
+      },
+      {
+        "name": "retry_normal_fee",
+        "index": 2
+      },
+      {
+        "name": "retry_tip",
+        "index": 3
+      }
+    ]
+  },
+  {
+    "name": "ValidatorSecurity",
+    "index": 21,
+    "calls": []
+  },
+  {
+    "name": "FounderCustody",
+    "index": 22,
+    "calls": [
+      {
+        "name": "approve_withdrawal",
+        "index": 0
+      }
+    ]
+  },
+  {
+    "name": "FreshGenesis",
+    "index": 23,
+    "calls": []
+  }
+]

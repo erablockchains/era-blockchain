@@ -509,6 +509,8 @@ pub struct PredictionTokenSettlementClaim<Balance, BlockNumber> {
 }
 
 pub trait WeightInfo {
+    fn submit_evaluation() -> Weight { Weight::MAX }
+    fn record_evaluation_evidence() -> Weight { Weight::MAX }
     fn register_model() -> Weight;
     fn update_model() -> Weight;
     fn approve_model() -> Weight;
@@ -668,7 +670,7 @@ impl WeightInfo for () {
 #[frame_support::pallet]
 pub mod pallet {
     use super::*;
-    use frame_support::traits::{Currency, ReservableCurrency};
+    use frame_support::traits::{tokens::BalanceStatus, Currency, ReservableCurrency};
     use frame_system::pallet_prelude::*;
     use sp_runtime::traits::AccountIdConversion;
     use sp_runtime::traits::{SaturatedConversion, Saturating, Zero};
@@ -755,11 +757,33 @@ pub mod pallet {
         #[pallet::constant]
         type MaxPredictionsPerModel: Get<u32>;
 
+        /// Compile-time policy. False rejects creation of financial obligations and tokens.
+        #[pallet::constant]
+        type FinancialModesAllowed: Get<bool>;
+        type NowSeconds: Get<u64>;
         type Currency: ReservableCurrency<Self::AccountId>;
         type PalletId: frame_support::traits::Get<frame_support::PalletId>;
+        /// Approved keyless, accumulation-only destination. No issuance is burned.
+        type PenaltyDestination: Get<Self::AccountId>;
 
         type WeightInfo: WeightInfo;
     }
+
+    /// Immutable artifact commitment for an existing prediction ID. Payload hash commits
+    /// canonical input/version/horizon/terms off-chain. No token or financial position.
+    #[pallet::storage]
+    pub type EvaluationBindings<T: Config> = StorageMap<_, Blake2_128Concat, PredictionId, [u8;32], OptionQuery>;
+    #[pallet::storage]
+    pub type EvaluationTiming<T: Config> = StorageMap<_, Blake2_128Concat, PredictionId, (u64, u64), OptionQuery>;
+    /// Stable business key survives process restart and delegation changes.
+    #[pallet::storage]
+    pub type EvaluationRequests<T: Config> = StorageDoubleMap<_, Blake2_128Concat, ModelId, Blake2_128Concat, [u8;32], PredictionId, OptionQuery>;
+    #[pallet::storage]
+    pub type EvaluationRevisionCount<T: Config> = StorageMap<_, Blake2_128Concat, PredictionId, u32, ValueQuery>;
+    /// Append-only evidence revisions, bounded to 32 per prediction. Original validation
+    /// statistics are historical; clients must derive corrected scores from this log.
+    #[pallet::storage]
+    pub type EvaluationEvidence<T: Config> = StorageDoubleMap<_, Blake2_128Concat, PredictionId, Twox64Concat, u32, (T::AccountId, [u8;32], PredictionOutcome, BlockNumberFor<T>), OptionQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn next_model_id)]
@@ -1169,6 +1193,18 @@ pub mod pallet {
             total_refunded: BalanceOf<T>,
             total_slashed: BalanceOf<T>,
         },
+        ReservedPenaltyTransferred {
+            payer: T::AccountId,
+            destination: T::AccountId,
+            amount: BalanceOf<T>,
+            /// 0: incorrect prediction, 1: fraudulent prediction, 2: explicitly adjudicated fraudulent dispute bond.
+            source: u8,
+            reference: u64,
+        },
+        DisputeBondAdjudicated { dispute_id: DisputeId, accepted: bool, fraudulent: bool, evidence_hash: [u8;32] },
+        PredictionMarketNoWinnerRefund { token_id: PredictionTokenId, staker: T::AccountId, amount: BalanceOf<T> },
+        EvaluationRecorded { prediction_id: PredictionId, request_id: [u8;32], artifact: [u8;32] },
+        EvaluationEvidenceRecorded { prediction_id: PredictionId, revision: u32, evidence: [u8;32], outcome: PredictionOutcome },
     }
 
     #[pallet::error]
@@ -1249,7 +1285,18 @@ pub mod pallet {
         PredictionModelIndexFull,
         TooManyActivePredictions,
         PredictionNotOpen,
-    }
+        ReserveInvariant,
+        InvalidPenaltyDestination,
+        InvalidBondAdjudication,
+            FinancialModeDisabled,
+        EvaluationSubmissionRequired,
+        EvaluationEvidenceRequired,
+        EvaluationRequestConflict,
+        EvaluationArtifactChanged,
+        EvaluationTooEarly,
+        EvaluationReviewerConflict,
+        EvaluationRevisionConflict,
+}
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
@@ -1273,19 +1320,19 @@ pub mod pallet {
                 PredictionTokenSideStakes::<T>::iter_keys().count() as u64,
                 PredictionTokenSidePayoutClaims::<T>::iter_keys().count() as u64,
             );
-            Ok(snapshot.encode())
+            Ok((version, snapshot).encode())
         }
 
         #[cfg(feature = "try-runtime")]
         fn post_upgrade(state: Vec<u8>) -> Result<(), sp_runtime::TryRuntimeError> {
-            let (market_config, models, predictions, accounting, positions, claims): (
+            let (previous_version, (market_config, models, predictions, accounting, positions, claims)): (frame_support::traits::StorageVersion, (
                 PredictionMarketEconomicsSettings,
                 u64,
                 u64,
                 u64,
                 u64,
                 u64,
-            ) = Decode::decode(&mut &state[..])
+            )) = Decode::decode(&mut &state[..])
                 .map_err(|_| "invalid Phase 6B pre-upgrade state")?;
             if frame_support::traits::StorageVersion::get::<Pallet<T>>() != STORAGE_VERSION {
                 return Err("AI predictions storage version was not upgraded to 3".into());
@@ -1315,7 +1362,7 @@ pub mod pallet {
                 } else {
                     ModelStatus::Suspended
                 };
-                if governance.status != expected {
+                if previous_version == frame_support::traits::StorageVersion::new(2) && governance.status != expected {
                     return Err("incorrect migrated model status".into());
                 }
             }
@@ -1432,6 +1479,11 @@ pub mod pallet {
                 Ok(())
             })?;
 
+            if !T::FinancialModesAllowed::get() {
+                ModelGovernanceById::<T>::mutate(model_id, |value| {
+                    if let Some(governance) = value { governance.status = ModelStatus::Pending; }
+                });
+            }
             Self::deposit_event(Event::ModelUpdated { model_id, owner });
             Ok(())
         }
@@ -1452,97 +1504,8 @@ pub mod pallet {
             confidence: u8,
             expires_at: BlockNumberFor<T>,
         ) -> DispatchResult {
-            let submitter = ensure_signed(origin)?;
-            let onboarding = ModelOnboardingConfig::<T>::get();
-            ensure!(
-                onboarding.prediction_submission_enabled,
-                Error::<T>::PredictionSubmissionDisabled
-            );
-            ensure!(
-                onboarding.market_creation_enabled,
-                Error::<T>::MarketCreationDisabled
-            );
-            ensure!(confidence <= 100, Error::<T>::InvalidConfidence);
-
-            let model = Models::<T>::get(model_id).ok_or(Error::<T>::ModelNotFound)?;
-            ensure!(model.active, Error::<T>::ModelInactive);
-            let governance =
-                ModelGovernanceById::<T>::get(model_id).ok_or(Error::<T>::ModelNotApproved)?;
-            match governance.status {
-                ModelStatus::Pending => ensure!(
-                    !onboarding.require_model_approval,
-                    Error::<T>::ModelNotApproved
-                ),
-                ModelStatus::Approved => {}
-                ModelStatus::Suspended => return Err(Error::<T>::ModelSuspended.into()),
-                ModelStatus::Rejected => return Err(Error::<T>::ModelRejected.into()),
-            }
-            ensure!(
-                submitter == model.owner
-                    || governance.authorized_submitter.as_ref() == Some(&submitter),
-                Error::<T>::NotAuthorizedModelSubmitter
-            );
-            ensure!(
-                ActivePredictionCountByModel::<T>::get(model_id)
-                    < onboarding.max_active_predictions_per_model,
-                Error::<T>::TooManyActivePredictions
-            );
-
-            let now = frame_system::Pallet::<T>::block_number();
-            ensure!(expires_at > now, Error::<T>::PredictionExpired);
-
-            let category_code = Self::bounded_category_code(category_code)?;
-            let prediction_hash = Self::bounded_prediction_hash(prediction_hash)?;
-            let metadata_uri = Self::bounded_metadata_uri(metadata_uri)?;
-
-            let prediction_id = NextPredictionId::<T>::get();
-            let next_prediction_id = prediction_id.checked_add(1).ok_or(Error::<T>::Overflow)?;
-
-            ModelStatsById::<T>::try_mutate(model_id, |maybe_stats| -> DispatchResult {
-                let stats = maybe_stats.as_mut().ok_or(Error::<T>::ModelNotFound)?;
-                stats.total_predictions = stats
-                    .total_predictions
-                    .checked_add(1)
-                    .ok_or(Error::<T>::Overflow)?;
-                Ok(())
-            })?;
-
-            let prediction = Prediction {
-                model_id,
-                submitter: submitter.clone(),
-                domain,
-                category_code,
-                prediction_hash,
-                metadata_uri,
-                confidence,
-                created_at: now,
-                expires_at,
-                status: PredictionStatus::Open,
-                outcome: None,
-                validator: None,
-                validated_at: None,
-            };
-
-            Predictions::<T>::insert(prediction_id, prediction);
-            PredictionIdsByModel::<T>::try_mutate(model_id, |ids| ids.try_push(prediction_id))
-                .map_err(|_| Error::<T>::PredictionModelIndexFull)?;
-            ActivePredictionCountByModel::<T>::mutate(model_id, |count| {
-                *count = count.saturating_add(1)
-            });
-            NextPredictionId::<T>::put(next_prediction_id);
-
-            Self::deposit_event(Event::PredictionSubmitted {
-                prediction_id,
-                model_id,
-                submitter,
-                domain,
-            });
-            Self::deposit_event(Event::PredictionOpened {
-                prediction_id,
-                model_id,
-            });
-
-            Ok(())
+            ensure!(T::FinancialModesAllowed::get(), Error::<T>::EvaluationSubmissionRequired);
+            Self::do_submit_prediction(origin, model_id, domain, category_code, prediction_hash, metadata_uri, confidence, expires_at)
         }
 
         #[pallet::call_index(3)]
@@ -1552,80 +1515,8 @@ pub mod pallet {
             prediction_id: PredictionId,
             outcome: PredictionOutcome,
         ) -> DispatchResult {
-            let validator = ensure_signed(origin)?;
-            ensure!(
-                AuthorizedValidators::<T>::get(&validator),
-                Error::<T>::NotAuthorizedValidator
-            );
-
-            let now = frame_system::Pallet::<T>::block_number();
-
-            Predictions::<T>::try_mutate(prediction_id, |maybe_prediction| -> DispatchResult {
-                let prediction = maybe_prediction
-                    .as_mut()
-                    .ok_or(Error::<T>::PredictionNotFound)?;
-
-                ensure!(
-                    prediction.status == PredictionStatus::Open,
-                    Error::<T>::PredictionAlreadyValidated
-                );
-                ensure!(
-                    prediction.outcome.is_none(),
-                    Error::<T>::PredictionAlreadyValidated
-                );
-
-                ModelStatsById::<T>::try_mutate(
-                    prediction.model_id,
-                    |maybe_stats| -> DispatchResult {
-                        let stats = maybe_stats.as_mut().ok_or(Error::<T>::ModelNotFound)?;
-
-                        stats.validated_predictions = stats
-                            .validated_predictions
-                            .checked_add(1)
-                            .ok_or(Error::<T>::Overflow)?;
-
-                        match outcome {
-                            PredictionOutcome::Successful => {
-                                stats.successful_predictions = stats
-                                    .successful_predictions
-                                    .checked_add(1)
-                                    .ok_or(Error::<T>::Overflow)?;
-                            }
-                            PredictionOutcome::Failed => {
-                                stats.failed_predictions = stats
-                                    .failed_predictions
-                                    .checked_add(1)
-                                    .ok_or(Error::<T>::Overflow)?;
-                            }
-                            PredictionOutcome::Inconclusive => {
-                                stats.inconclusive_predictions = stats
-                                    .inconclusive_predictions
-                                    .checked_add(1)
-                                    .ok_or(Error::<T>::Overflow)?;
-                            }
-                        }
-
-                        Ok(())
-                    },
-                )?;
-
-                ActivePredictionCountByModel::<T>::mutate(prediction.model_id, |count| {
-                    *count = count.saturating_sub(1)
-                });
-                prediction.status = PredictionStatus::Validated;
-                prediction.outcome = Some(outcome);
-                prediction.validator = Some(validator.clone());
-                prediction.validated_at = Some(now);
-
-                Self::deposit_event(Event::PredictionValidated {
-                    prediction_id,
-                    model_id: prediction.model_id,
-                    validator: validator.clone(),
-                    outcome,
-                });
-
-                Ok(())
-            })
+            ensure!(!EvaluationBindings::<T>::contains_key(prediction_id), Error::<T>::EvaluationEvidenceRequired);
+            Self::do_validate_prediction(origin, prediction_id, outcome)
         }
 
         #[pallet::call_index(4)]
@@ -1634,6 +1525,8 @@ pub mod pallet {
             origin: OriginFor<T>,
             prediction_id: PredictionId,
         ) -> DispatchResult {
+            // Evaluation recovery is an evidence-bearing Inconclusive result, not silent closure.
+            ensure!(!EvaluationBindings::<T>::contains_key(prediction_id), Error::<T>::EvaluationEvidenceRequired);
             let maybe_who = frame_system::ensure_signed_or_root(origin)?;
 
             Predictions::<T>::try_mutate(prediction_id, |maybe_prediction| -> DispatchResult {
@@ -1701,6 +1594,7 @@ pub mod pallet {
             tokenization_enabled: bool,
             transfers_enabled: bool,
         ) -> DispatchResult {
+            ensure!(T::FinancialModesAllowed::get() || !(tokenization_enabled || transfers_enabled), Error::<T>::FinancialModeDisabled);
             ensure_root(origin)?;
 
             TokenizationConfig::<T>::put(TokenizationSettings {
@@ -1724,6 +1618,7 @@ pub mod pallet {
             metadata_uri: Vec<u8>,
             transferable: bool,
         ) -> DispatchResult {
+            ensure!(T::FinancialModesAllowed::get(), Error::<T>::FinancialModeDisabled);
             let owner = ensure_signed(origin)?;
             let settings = TokenizationConfig::<T>::get();
 
@@ -1781,6 +1676,7 @@ pub mod pallet {
             token_id: PredictionTokenId,
             approved: T::AccountId,
         ) -> DispatchResult {
+            ensure!(T::FinancialModesAllowed::get(), Error::<T>::FinancialModeDisabled);
             let owner = ensure_signed(origin)?;
             let token =
                 PredictionTokens::<T>::get(token_id).ok_or(Error::<T>::PredictionTokenNotFound)?;
@@ -1826,6 +1722,7 @@ pub mod pallet {
             token_id: PredictionTokenId,
             to: T::AccountId,
         ) -> DispatchResult {
+            ensure!(T::FinancialModesAllowed::get(), Error::<T>::FinancialModeDisabled);
             let sender = ensure_signed(origin)?;
             let settings = TokenizationConfig::<T>::get();
             let now = frame_system::Pallet::<T>::block_number();
@@ -1971,6 +1868,7 @@ pub mod pallet {
             staking_enabled: bool,
             min_stake: BalanceOf<T>,
         ) -> DispatchResult {
+            ensure!(T::FinancialModesAllowed::get() || !(staking_enabled), Error::<T>::FinancialModeDisabled);
             ensure_root(origin)?;
 
             StakingConfig::<T>::put(StakingSettings {
@@ -1993,6 +1891,7 @@ pub mod pallet {
             token_id: PredictionTokenId,
             amount: BalanceOf<T>,
         ) -> DispatchResult {
+            ensure!(T::FinancialModesAllowed::get(), Error::<T>::FinancialModeDisabled);
             let staker = ensure_signed(origin)?;
             let settings = StakingConfig::<T>::get();
             let now = frame_system::Pallet::<T>::block_number();
@@ -2009,6 +1908,12 @@ pub mod pallet {
                 PredictionTokens::<T>::get(token_id).ok_or(Error::<T>::PredictionTokenNotFound)?;
             ensure!(!token.burned, Error::<T>::TokenBurned);
             ensure!(!token.frozen, Error::<T>::TokenFrozen);
+            // Admission ends when resolution starts. Existing financial claims stay intact.
+            ensure!(!PredictionTokenSettlements::<T>::contains_key(token_id), Error::<T>::SettlementAlreadyStarted);
+            let prediction = Predictions::<T>::get(token.prediction_id)
+                .ok_or(Error::<T>::PredictionNotFound)?;
+            ensure!(prediction.status == PredictionStatus::Open && prediction.expires_at > now,
+                Error::<T>::PredictionNotOpen);
 
             T::Currency::reserve(&staker, amount)?;
 
@@ -2092,7 +1997,7 @@ pub mod pallet {
                 *total = total.saturating_sub(amount);
             });
 
-            let _ = T::Currency::unreserve(&staker, amount);
+            Self::refund_reserved_exact(&staker, amount)?;
 
             Self::deposit_event(Event::PredictionTokenStakeRemoved {
                 token_id,
@@ -2153,6 +2058,7 @@ pub mod pallet {
             dispute_window_blocks: BlockNumberFor<T>,
             min_dispute_bond: BalanceOf<T>,
         ) -> DispatchResult {
+            ensure!(T::FinancialModesAllowed::get() || !(settlement_enabled), Error::<T>::FinancialModeDisabled);
             ensure_root(origin)?;
 
             SettlementConfig::<T>::put(SettlementSettings {
@@ -2178,6 +2084,7 @@ pub mod pallet {
             proposed_outcome: SettlementOutcome,
             evidence_uri: Vec<u8>,
         ) -> DispatchResult {
+            ensure!(T::FinancialModesAllowed::get(), Error::<T>::FinancialModeDisabled);
             let maybe_proposer = frame_system::ensure_signed_or_root(origin)?;
             let settings = SettlementConfig::<T>::get();
             let now = frame_system::Pallet::<T>::block_number();
@@ -2242,6 +2149,7 @@ pub mod pallet {
             evidence_uri: Vec<u8>,
             bond: BalanceOf<T>,
         ) -> DispatchResult {
+            ensure!(T::FinancialModesAllowed::get(), Error::<T>::FinancialModeDisabled);
             let disputed_by = ensure_signed(origin)?;
             let settings = SettlementConfig::<T>::get();
             let now = frame_system::Pallet::<T>::block_number();
@@ -2345,6 +2253,8 @@ pub mod pallet {
                         Error::<T>::SettlementAlreadyFinalized
                     );
 
+                    // Cancellation promises refunds and may already have paid them.
+                    ensure!(settlement.status != SettlementStatus::Cancelled, Error::<T>::SettlementNotFinalizable);
                     settlement.status = SettlementStatus::Finalized;
                     settlement.final_outcome = Some(final_outcome);
                     settlement.finalized_by = None;
@@ -2473,6 +2383,9 @@ pub mod pallet {
                 },
             )?;
 
+            PredictionTokenStakeLocked::<T>::insert(token_id, true);
+            PredictionTokenMarketLocked::<T>::insert(token_id, true);
+
             Self::deposit_event(Event::PredictionSettlementCancelled { token_id });
 
             Ok(())
@@ -2486,6 +2399,7 @@ pub mod pallet {
             slash_incorrect: bool,
             slash_fraudulent: bool,
         ) -> DispatchResult {
+            ensure!(T::FinancialModesAllowed::get() || !(economics_enabled || slash_incorrect || slash_fraudulent), Error::<T>::FinancialModeDisabled);
             ensure_root(origin)?;
 
             let config = SettlementEconomicsSettings {
@@ -2515,7 +2429,7 @@ pub mod pallet {
 
             let economics_config = SettlementEconomicsConfig::<T>::get();
             ensure!(
-                economics_config.economics_enabled,
+                economics_config.economics_enabled || !T::FinancialModesAllowed::get(),
                 Error::<T>::SettlementEconomicsDisabled
             );
 
@@ -2556,26 +2470,24 @@ pub mod pallet {
                 SettlementOutcome::Correct
                 | SettlementOutcome::Inconclusive
                 | SettlementOutcome::Cancelled => {
-                    let _remaining = T::Currency::unreserve(&claimer, amount);
+                    Self::refund_reserved_exact(&claimer, amount)?;
                     refunded = amount;
                 }
                 SettlementOutcome::Incorrect => {
                     if economics_config.slash_incorrect {
-                        let (_imbalance, _remaining) =
-                            T::Currency::slash_reserved(&claimer, amount);
+                        Self::transfer_reserved_penalty(&claimer, amount, 0, token_id)?;
                         slashed = amount;
                     } else {
-                        let _remaining = T::Currency::unreserve(&claimer, amount);
+                        Self::refund_reserved_exact(&claimer, amount)?;
                         refunded = amount;
                     }
                 }
                 SettlementOutcome::Fraudulent => {
                     if economics_config.slash_fraudulent {
-                        let (_imbalance, _remaining) =
-                            T::Currency::slash_reserved(&claimer, amount);
+                        Self::transfer_reserved_penalty(&claimer, amount, 1, token_id)?;
                         slashed = amount;
                     } else {
-                        let _remaining = T::Currency::unreserve(&claimer, amount);
+                        Self::refund_reserved_exact(&claimer, amount)?;
                         refunded = amount;
                     }
                 }
@@ -2583,7 +2495,9 @@ pub mod pallet {
 
             PredictionTokenStakes::<T>::remove(token_id, &claimer);
 
-            let new_total = PredictionTokenTotalStake::<T>::get(token_id).saturating_sub(amount);
+            let total = PredictionTokenTotalStake::<T>::get(token_id);
+            ensure!(total >= amount, Error::<T>::ReserveInvariant);
+            let new_total = total - amount;
             PredictionTokenTotalStake::<T>::insert(token_id, new_total);
 
             if new_total.is_zero() {
@@ -2617,53 +2531,7 @@ pub mod pallet {
         ) -> DispatchResult {
             ensure_root(origin)?;
 
-            let economics_config = SettlementEconomicsConfig::<T>::get();
-            ensure!(
-                economics_config.economics_enabled,
-                Error::<T>::SettlementEconomicsDisabled
-            );
-
-            let (token_id, disputed_by, bond) = PredictionTokenDisputes::<T>::try_mutate(
-                dispute_id,
-                |maybe_dispute| -> Result<_, DispatchError> {
-                    let dispute = maybe_dispute.as_mut().ok_or(Error::<T>::DisputeNotFound)?;
-
-                    ensure!(!dispute.resolved, Error::<T>::DisputeAlreadyResolved);
-
-                    let settlement = PredictionTokenSettlements::<T>::get(dispute.token_id)
-                        .ok_or(Error::<T>::SettlementNotFound)?;
-
-                    ensure!(
-                        matches!(
-                            settlement.status,
-                            SettlementStatus::Finalized | SettlementStatus::Cancelled
-                        ),
-                        Error::<T>::SettlementNotFinalized
-                    );
-
-                    if accepted {
-                        let _remaining = T::Currency::unreserve(&dispute.disputed_by, dispute.bond);
-                    } else {
-                        let (_imbalance, _remaining) =
-                            T::Currency::slash_reserved(&dispute.disputed_by, dispute.bond);
-                    }
-
-                    dispute.resolved = true;
-                    dispute.accepted = Some(accepted);
-
-                    Ok((dispute.token_id, dispute.disputed_by.clone(), dispute.bond))
-                },
-            )?;
-
-            Self::deposit_event(Event::PredictionDisputeBondResolved {
-                dispute_id,
-                token_id,
-                disputed_by,
-                accepted,
-                bond,
-            });
-
-            Ok(())
+            Self::resolve_bond(dispute_id, accepted, false, [0;32])
         }
 
         #[pallet::call_index(30)]
@@ -2673,6 +2541,7 @@ pub mod pallet {
             market_enabled: bool,
             allow_unstake_before_settlement: bool,
         ) -> DispatchResult {
+            ensure!(T::FinancialModesAllowed::get() || !(market_enabled), Error::<T>::FinancialModeDisabled);
             ensure_root(origin)?;
 
             PredictionMarketEconomicsConfig::<T>::mutate(|config| {
@@ -2696,6 +2565,7 @@ pub mod pallet {
             side: PredictionOutcomeSide,
             amount: BalanceOf<T>,
         ) -> DispatchResult {
+            ensure!(T::FinancialModesAllowed::get(), Error::<T>::FinancialModeDisabled);
             let staker = ensure_signed(origin)?;
 
             let market_config = PredictionMarketEconomicsConfig::<T>::get();
@@ -2719,6 +2589,9 @@ pub mod pallet {
 
             let token =
                 PredictionTokens::<T>::get(token_id).ok_or(Error::<T>::PredictionTokenNotFound)?;
+            ensure!(!token.burned, Error::<T>::TokenBurned);
+            ensure!(!token.frozen, Error::<T>::TokenFrozen);
+            ensure!(!PredictionTokenSettlements::<T>::contains_key(token_id), Error::<T>::SettlementAlreadyStarted);
             let prediction =
                 Predictions::<T>::get(token.prediction_id).ok_or(Error::<T>::PredictionNotFound)?;
             ensure!(
@@ -2789,7 +2662,7 @@ pub mod pallet {
 
             let market_config = PredictionMarketEconomicsConfig::<T>::get();
             ensure!(
-                market_config.market_enabled,
+                market_config.market_enabled || !T::FinancialModesAllowed::get(),
                 Error::<T>::MarketEconomicsDisabled
             );
             ensure!(
@@ -2862,7 +2735,7 @@ pub mod pallet {
 
             let market_config = PredictionMarketEconomicsConfig::<T>::get();
             ensure!(
-                market_config.market_enabled,
+                market_config.market_enabled || !T::FinancialModesAllowed::get(),
                 Error::<T>::MarketEconomicsDisabled
             );
 
@@ -2892,6 +2765,14 @@ pub mod pallet {
                     .final_outcome
                     .ok_or(Error::<T>::MarketPayoutNotAvailable)?
             };
+
+            let no_winner = Self::winning_market_side(&final_outcome)
+                .map(|side| PredictionTokenSideTotals::<T>::get(token_id, side).is_zero())
+                .unwrap_or(false);
+            let final_outcome = if no_winner {
+                Self::deposit_event(Event::PredictionMarketNoWinnerRefund { token_id, staker: claimer.clone(), amount: stake.amount });
+                SettlementOutcome::Inconclusive
+            } else { final_outcome };
 
             let is_refund_outcome = matches!(
                 &final_outcome,
@@ -3099,6 +2980,7 @@ pub mod pallet {
             fee_bps: u16,
             treasury_enabled: bool,
         ) -> DispatchResult {
+            ensure!(T::FinancialModesAllowed::get() || !(fees_enabled), Error::<T>::FinancialModeDisabled);
             ensure_root(origin)?;
             ensure!(fee_bps <= 10_000, Error::<T>::MarketFeeBpsTooHigh);
 
@@ -3186,9 +3068,254 @@ pub mod pallet {
             });
             Ok(())
         }
+        /// Explicit fraud finding; ordinary unsuccessful disputes are refunded by call29.
+        #[pallet::call_index(40)]
+        #[pallet::weight(Weight::MAX)]
+        pub fn adjudicate_prediction_dispute_bond(
+            origin: OriginFor<T>, dispute_id: DisputeId, accepted: bool,
+            fraudulent: bool, evidence_hash: [u8;32],
+        ) -> DispatchResult {
+            ensure!(T::FinancialModesAllowed::get() || !fraudulent, Error::<T>::FinancialModeDisabled);
+            ensure_root(origin)?;
+            ensure!(!(accepted && fraudulent) && evidence_hash != [0;32], Error::<T>::InvalidBondAdjudication);
+            Self::resolve_bond(dispute_id, accepted, fraudulent, evidence_hash)
+        }
+        /// The existing prediction hash commits canonical model/version/input/horizon/terms.
+        /// A duplicate exact business request succeeds without a second prediction.
+        #[pallet::call_index(41)]
+        #[pallet::weight(T::WeightInfo::submit_evaluation())]
+        #[frame_support::transactional]
+        pub fn submit_evaluation(
+            origin: OriginFor<T>, model_id: ModelId, request_id: [u8;32],
+            artifact: [u8;32], prediction_hash: [u8;32], metadata_uri: Vec<u8>,
+            confidence: u8, expires_at: BlockNumberFor<T>, cutoff_utc: u64, evidence_after_utc: u64,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin.clone())?;
+            ensure!(request_id != [0;32] && prediction_hash != [0;32] && artifact != [0;32], Error::<T>::InvalidPredictionHash);
+            if let Some(id) = EvaluationRequests::<T>::get(model_id, request_id) {
+                let old = Predictions::<T>::get(id).ok_or(Error::<T>::PredictionNotFound)?;
+                ensure!(old.submitter == who && old.prediction_hash.as_slice() == prediction_hash && old.metadata_uri.as_slice() == metadata_uri && old.confidence == confidence && old.expires_at == expires_at && EvaluationBindings::<T>::get(id) == Some(artifact) && EvaluationTiming::<T>::get(id) == Some((cutoff_utc, evidence_after_utc)), Error::<T>::EvaluationRequestConflict);
+                return Ok(());
+            }
+            ensure!(T::NowSeconds::get() < cutoff_utc && cutoff_utc < evidence_after_utc, Error::<T>::EvaluationTooEarly);
+            let model = Models::<T>::get(model_id).ok_or(Error::<T>::ModelNotFound)?;
+            ensure!(model.model_hash.as_slice() == artifact, Error::<T>::EvaluationArtifactChanged);
+            ensure!(ModelGovernanceById::<T>::get(model_id).map(|g| g.status == ModelStatus::Approved).unwrap_or(false), Error::<T>::ModelNotApproved);
+            let id = NextPredictionId::<T>::get();
+            Self::do_submit_prediction(origin, model_id, PredictionDomain::WeatherClimate, b"station-temperature-v1".to_vec(), prediction_hash.to_vec(), metadata_uri, confidence, expires_at)?;
+            EvaluationBindings::<T>::insert(id, artifact);
+            EvaluationTiming::<T>::insert(id, (cutoff_utc, evidence_after_utc));
+            EvaluationRequests::<T>::insert(model_id, request_id, id);
+            Self::deposit_event(Event::EvaluationRecorded { prediction_id: id, request_id, artifact });
+            Ok(())
+        }
+
+        /// Authorized independent account publishes evidence; corrections append, never erase.
+        #[pallet::call_index(42)]
+        #[pallet::weight(T::WeightInfo::record_evaluation_evidence())]
+        #[frame_support::transactional]
+        pub fn record_evaluation_evidence(origin: OriginFor<T>, prediction_id: PredictionId, revision: u32, evidence: [u8;32], outcome: PredictionOutcome) -> DispatchResult {
+            let who = ensure_signed(origin.clone())?;
+            ensure!(AuthorizedValidators::<T>::get(&who), Error::<T>::NotAuthorizedValidator);
+            ensure!(EvaluationBindings::<T>::contains_key(prediction_id) && evidence != [0;32], Error::<T>::EvaluationEvidenceRequired);
+            let prediction = Predictions::<T>::get(prediction_id).ok_or(Error::<T>::PredictionNotFound)?;
+            let model = Models::<T>::get(prediction.model_id).ok_or(Error::<T>::ModelNotFound)?;
+            ensure!(who != prediction.submitter && who != model.owner, Error::<T>::EvaluationReviewerConflict);
+            let (_, evidence_after) = EvaluationTiming::<T>::get(prediction_id).ok_or(Error::<T>::EvaluationEvidenceRequired)?;
+            ensure!(T::NowSeconds::get() >= evidence_after, Error::<T>::EvaluationTooEarly);
+            let count = EvaluationRevisionCount::<T>::get(prediction_id);
+            ensure!(revision == count && count < 32, Error::<T>::EvaluationRevisionConflict);
+            if count == 0 { Self::do_validate_prediction(origin, prediction_id, outcome)?; }
+            EvaluationEvidence::<T>::insert(prediction_id, revision, (who, evidence, outcome, frame_system::Pallet::<T>::block_number()));
+            EvaluationRevisionCount::<T>::insert(prediction_id, count + 1);
+            Self::deposit_event(Event::EvaluationEvidenceRecorded { prediction_id, revision, evidence, outcome });
+            Ok(())
+        }
     }
 
     impl<T: Config> Pallet<T> {
+        fn do_submit_prediction(
+            origin: OriginFor<T>,
+            model_id: ModelId,
+            domain: PredictionDomain,
+            category_code: Vec<u8>,
+            prediction_hash: Vec<u8>,
+            metadata_uri: Vec<u8>,
+            confidence: u8,
+            expires_at: BlockNumberFor<T>,
+        ) -> DispatchResult {
+            let submitter = ensure_signed(origin)?;
+            let onboarding = ModelOnboardingConfig::<T>::get();
+            ensure!(
+                onboarding.prediction_submission_enabled,
+                Error::<T>::PredictionSubmissionDisabled
+            );
+            ensure!(
+                onboarding.market_creation_enabled || !T::FinancialModesAllowed::get(),
+                Error::<T>::MarketCreationDisabled
+            );
+            ensure!(confidence <= 100, Error::<T>::InvalidConfidence);
+
+            let model = Models::<T>::get(model_id).ok_or(Error::<T>::ModelNotFound)?;
+            ensure!(model.active, Error::<T>::ModelInactive);
+            let governance =
+                ModelGovernanceById::<T>::get(model_id).ok_or(Error::<T>::ModelNotApproved)?;
+            match governance.status {
+                ModelStatus::Pending => ensure!(
+                    !onboarding.require_model_approval,
+                    Error::<T>::ModelNotApproved
+                ),
+                ModelStatus::Approved => {}
+                ModelStatus::Suspended => return Err(Error::<T>::ModelSuspended.into()),
+                ModelStatus::Rejected => return Err(Error::<T>::ModelRejected.into()),
+            }
+            ensure!(
+                submitter == model.owner
+                    || governance.authorized_submitter.as_ref() == Some(&submitter),
+                Error::<T>::NotAuthorizedModelSubmitter
+            );
+            ensure!(
+                ActivePredictionCountByModel::<T>::get(model_id)
+                    < onboarding.max_active_predictions_per_model,
+                Error::<T>::TooManyActivePredictions
+            );
+
+            let now = frame_system::Pallet::<T>::block_number();
+            ensure!(expires_at > now, Error::<T>::PredictionExpired);
+
+            let category_code = Self::bounded_category_code(category_code)?;
+            let prediction_hash = Self::bounded_prediction_hash(prediction_hash)?;
+            let metadata_uri = Self::bounded_metadata_uri(metadata_uri)?;
+
+            let prediction_id = NextPredictionId::<T>::get();
+            let next_prediction_id = prediction_id.checked_add(1).ok_or(Error::<T>::Overflow)?;
+
+            ModelStatsById::<T>::try_mutate(model_id, |maybe_stats| -> DispatchResult {
+                let stats = maybe_stats.as_mut().ok_or(Error::<T>::ModelNotFound)?;
+                stats.total_predictions = stats
+                    .total_predictions
+                    .checked_add(1)
+                    .ok_or(Error::<T>::Overflow)?;
+                Ok(())
+            })?;
+
+            let prediction = Prediction {
+                model_id,
+                submitter: submitter.clone(),
+                domain,
+                category_code,
+                prediction_hash,
+                metadata_uri,
+                confidence,
+                created_at: now,
+                expires_at,
+                status: PredictionStatus::Open,
+                outcome: None,
+                validator: None,
+                validated_at: None,
+            };
+
+            Predictions::<T>::insert(prediction_id, prediction);
+            PredictionIdsByModel::<T>::try_mutate(model_id, |ids| ids.try_push(prediction_id))
+                .map_err(|_| Error::<T>::PredictionModelIndexFull)?;
+            ActivePredictionCountByModel::<T>::mutate(model_id, |count| {
+                *count = count.saturating_add(1)
+            });
+            NextPredictionId::<T>::put(next_prediction_id);
+
+            Self::deposit_event(Event::PredictionSubmitted {
+                prediction_id,
+                model_id,
+                submitter,
+                domain,
+            });
+            Self::deposit_event(Event::PredictionOpened {
+                prediction_id,
+                model_id,
+            });
+
+            Ok(())
+        }
+        fn do_validate_prediction(
+            origin: OriginFor<T>,
+            prediction_id: PredictionId,
+            outcome: PredictionOutcome,
+        ) -> DispatchResult {
+            let validator = ensure_signed(origin)?;
+            ensure!(
+                AuthorizedValidators::<T>::get(&validator),
+                Error::<T>::NotAuthorizedValidator
+            );
+
+            let now = frame_system::Pallet::<T>::block_number();
+
+            Predictions::<T>::try_mutate(prediction_id, |maybe_prediction| -> DispatchResult {
+                let prediction = maybe_prediction
+                    .as_mut()
+                    .ok_or(Error::<T>::PredictionNotFound)?;
+
+                ensure!(
+                    prediction.status == PredictionStatus::Open,
+                    Error::<T>::PredictionAlreadyValidated
+                );
+                ensure!(
+                    prediction.outcome.is_none(),
+                    Error::<T>::PredictionAlreadyValidated
+                );
+
+                ModelStatsById::<T>::try_mutate(
+                    prediction.model_id,
+                    |maybe_stats| -> DispatchResult {
+                        let stats = maybe_stats.as_mut().ok_or(Error::<T>::ModelNotFound)?;
+
+                        stats.validated_predictions = stats
+                            .validated_predictions
+                            .checked_add(1)
+                            .ok_or(Error::<T>::Overflow)?;
+
+                        match outcome {
+                            PredictionOutcome::Successful => {
+                                stats.successful_predictions = stats
+                                    .successful_predictions
+                                    .checked_add(1)
+                                    .ok_or(Error::<T>::Overflow)?;
+                            }
+                            PredictionOutcome::Failed => {
+                                stats.failed_predictions = stats
+                                    .failed_predictions
+                                    .checked_add(1)
+                                    .ok_or(Error::<T>::Overflow)?;
+                            }
+                            PredictionOutcome::Inconclusive => {
+                                stats.inconclusive_predictions = stats
+                                    .inconclusive_predictions
+                                    .checked_add(1)
+                                    .ok_or(Error::<T>::Overflow)?;
+                            }
+                        }
+
+                        Ok(())
+                    },
+                )?;
+
+                ActivePredictionCountByModel::<T>::mutate(prediction.model_id, |count| {
+                    *count = count.saturating_sub(1)
+                });
+                prediction.status = PredictionStatus::Validated;
+                prediction.outcome = Some(outcome);
+                prediction.validator = Some(validator.clone());
+                prediction.validated_at = Some(now);
+
+                Self::deposit_event(Event::PredictionValidated {
+                    prediction_id,
+                    model_id: prediction.model_id,
+                    validator: validator.clone(),
+                    outcome,
+                });
+
+                Ok(())
+            })
+        }
         fn ensure_model_admin(origin: OriginFor<T>) -> DispatchResult {
             match frame_system::ensure_signed_or_root(origin)? {
                 None => Ok(()),
@@ -3217,6 +3344,71 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
+        fn resolve_bond(dispute_id: DisputeId, accepted: bool, fraudulent: bool, evidence_hash: [u8;32]) -> DispatchResult {
+            let economics_config = SettlementEconomicsConfig::<T>::get();
+            ensure!(
+                economics_config.economics_enabled || !T::FinancialModesAllowed::get(),
+                Error::<T>::SettlementEconomicsDisabled
+            );
+
+            let (token_id, disputed_by, bond) = PredictionTokenDisputes::<T>::try_mutate(
+                dispute_id,
+                |maybe_dispute| -> Result<_, DispatchError> {
+                    let dispute = maybe_dispute.as_mut().ok_or(Error::<T>::DisputeNotFound)?;
+
+                    ensure!(!dispute.resolved, Error::<T>::DisputeAlreadyResolved);
+
+                    let settlement = PredictionTokenSettlements::<T>::get(dispute.token_id)
+                        .ok_or(Error::<T>::SettlementNotFound)?;
+
+                    ensure!(
+                        matches!(
+                            settlement.status,
+                            SettlementStatus::Finalized | SettlementStatus::Cancelled
+                        ),
+                        Error::<T>::SettlementNotFinalized
+                    );
+
+                    if !fraudulent {
+                        Self::refund_reserved_exact(&dispute.disputed_by, dispute.bond)?;
+                    } else {
+                        Self::transfer_reserved_penalty(&dispute.disputed_by, dispute.bond, 2, dispute_id)?;
+                    }
+
+                    dispute.resolved = true;
+                    dispute.accepted = Some(accepted);
+
+                    Ok((dispute.token_id, dispute.disputed_by.clone(), dispute.bond))
+                },
+            )?;
+
+            Self::deposit_event(Event::PredictionDisputeBondResolved {
+                dispute_id,
+                token_id,
+                disputed_by,
+                accepted,
+                bond,
+            });
+
+            Self::deposit_event(Event::DisputeBondAdjudicated { dispute_id, accepted, fraudulent, evidence_hash });
+            Ok(())
+        }
+
+        fn refund_reserved_exact(who: &T::AccountId, amount: BalanceOf<T>) -> DispatchResult {
+            ensure!(T::Currency::unreserve(who, amount).is_zero(), Error::<T>::ReserveInvariant);
+            Ok(())
+        }
+
+        fn transfer_reserved_penalty(who: &T::AccountId, amount: BalanceOf<T>, source: u8, reference: u64) -> DispatchResult {
+            let destination = T::PenaltyDestination::get();
+            ensure!(destination != *who, Error::<T>::InvalidPenaltyDestination);
+            let issuance = T::Currency::total_issuance();
+            let remainder = T::Currency::repatriate_reserved(who, &destination, amount, BalanceStatus::Free)?;
+            ensure!(remainder.is_zero() && T::Currency::total_issuance() == issuance, Error::<T>::ReserveInvariant);
+            Self::deposit_event(Event::ReservedPenaltyTransferred { payer: who.clone(), destination, amount, source, reference });
+            Ok(())
+        }
+
         pub fn market_account_id() -> T::AccountId {
             T::PalletId::get().into_account_truncating()
         }

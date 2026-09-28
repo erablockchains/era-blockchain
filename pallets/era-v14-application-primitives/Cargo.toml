@@ -1,0 +1,19 @@
+[package]
+name = "era-v14-application-primitives"
+description = "Frozen ERA V14 asset interfaces and bounded application-economy primitives."
+version = "0.1.0"
+authors = ["Era Contributors"]
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+sp-api = { workspace = true }
+codec = { workspace = true, features = ["derive", "max-encoded-len"] }
+scale-info = { workspace = true, features = ["derive"] }
+bounded-collections = { version = "=0.2.4", default-features = false }
+
+[features]
+default = ["std"]
+std = ["sp-api/std", "codec/std", "scale-info/std", "bounded-collections/std"]
+reference-fixtures = []

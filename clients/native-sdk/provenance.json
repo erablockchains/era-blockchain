@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 2,
+  "surfaceVersion": "0.1.0-private-review",
+  "status": "PRIVATE_PREPARATION_ONLY",
+  "sourceBase": {
+    "commit": "85d84c06b6298a3260bce3ff2d1cf0f60d6773df",
+    "tree": "9f68cb2fcb83502915d8f3764891ef20c0943a3a"
+  },
+  "finalCandidateBinding": {
+    "mode": "POSTCOMMIT_EXTERNAL_CHECKSUM_SEALED_EVIDENCE_REQUIRED",
+    "commit": null,
+    "tree": null,
+    "runtimeWasmSha256": null,
+    "metadataSha256": null
+  },
+  "targetRuntime": {
+    "specVersion": 14,
+    "transactionVersion": 1
+  },
+  "javascriptDependencies": [],
+  "includedGeneratedArtifacts": [],
+  "includedBinaries": [],
+  "publicationAuthorized": false,
+  "eraAuthoredLicense": "Apache-2.0",
+  "mixedThirdPartyTermsRetained": true,
+  "auditComplete": false,
+  "historicalImportNotice": "Retained private-review provenance above describes the imported historical surface; local changes are bound externally in development evidence, not publication approval.",
+  "localCompatibility": {
+    "deployedSpecVersion": 14,
+    "deployedRawMetadataSha256": "eed011f659bd492aedb643d775fce7cab26adb89c46db8598f4b2c079897e5d2",
+    "all25CallsDecodedInLocalRuntimeSpec15": true,
+    "spec15SigningProfileReady": false,
+    "actualBrowserWalletLifecycleValidated": false
+  }
+}

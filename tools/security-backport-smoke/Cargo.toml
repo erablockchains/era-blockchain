@@ -1,0 +1,13 @@
+[package]
+name = "era-security-backport-smoke"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+alloy-dyn-abi = { path = "../../vendor/alloy-dyn-abi-1.1.2-security", features = ["eip712"] }
+hickory-proto-024 = { package = "hickory-proto", path = "../../vendor/hickory-proto-0.24.4" }
+hickory-proto-025 = { package = "hickory-proto", path = "../../vendor/hickory-proto-0.25.2" }
+ruint = { path = "../../vendor/ruint-1.15.0-security" }
+time = { path = "../../vendor/time-0.3.44-security", features = ["parsing"] }
