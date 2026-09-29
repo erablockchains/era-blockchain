@@ -2,7 +2,7 @@
 
 # Current development provenance
 
-This completion tree descends from preserved candidate `5ff1f84f84e6e1b809420c9899f5aceeb3f8b5be` through development checkpoints `76ce6f5ff02f4cd0ec8909b6bb5aadafa62473f0` and `6fb7813c91051f406d470f8057ccc6339ecd5162`. It contains the executable V14 changes and dependency backports used for the authenticated release. The historical manifests and release hashes below bind their named earlier artifacts. Public development-key test tools contain no production signer, key store or credentials. Publication remains on hold pending commissioning and acceptance gates plus separate publication approval.
+This completion tree descends from preserved candidate `5ff1f84f84e6e1b809420c9899f5aceeb3f8b5be` through development checkpoints `76ce6f5ff02f4cd0ec8909b6bb5aadafa62473f0` and `6fb7813c91051f406d470f8057ccc6339ecd5162`. It contains the executable V14 changes and dependency backports used for the authenticated release. The historical manifests and release hashes below bind their named earlier artifacts. Public development-key test tools contain no production signer, key store or credentials. Source publication is a separate milestone requiring exact owner approval; unfinished NFT, reward, penalty and independent-qualification gates remain disclosed rather than silently waived.
 
 ## Preserved initial-release provenance
 

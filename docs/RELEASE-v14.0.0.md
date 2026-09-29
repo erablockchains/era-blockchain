@@ -1,6 +1,6 @@
 # ERA Blockchain V14.0.0 release notes
 
-This document describes the proposed `v14.0.0` source release. The tag and GitHub release do not exist until separately approved and published.
+This document describes the proposed `v14.0.0-rc.1` **source prerelease**. The tag and GitHub release do not exist until separately approved and published. Source publication is separate from full V14 production acceptance.
 
 ## Deployed identity
 
@@ -18,10 +18,10 @@ V14 deploys native ETKN transfers, BABE/GRANDPA consensus, staking, capped Secur
 
 Production allocator initialization, NFT funding/mint/ownership/sale/swap commissioning, the first legitimate SecurityBudget reward payment, and penalty-policy activation remain ordered V14 acceptance work. Source presence and synthetic tests do not claim those actions occurred. AMM and AI predictive-tokenization/model-service commissioning remain inactive and are deferred to V15. Sentry/private metadata storage is outside V14.
 
-Website R6 and the separately built native Windows/Android wallet downloads are outside this source archive. Android evidence is owner-performed. Checks for update/account preservation, ERA/spec15 connectivity, receiving QR switching and scanner behavior passed. A connection-readiness correction is prepared as Android build4 after build3 stopped before displaying reward eligibility; the affected read-only reward check remains open. Independent qualification and final programme acceptance are not claimed by this source release.
+Website R6 and the separately built native Windows/Android wallet downloads are outside this source archive. Android evidence is owner-performed. Checks for update/account preservation, ERA/spec15 connectivity, receiving QR switching and scanner behavior passed. Android build4 then passed the targeted read-only reward inspection on owner hardware; no claim occurred. Independent qualification and final programme acceptance are not claimed by this source prerelease.
 
 ## Release contents and limits
 
-This is a source-only release. It does not publish a newly reproduced or signed node binary. The tree contains the deployed runtime/node source snapshot, reviewed dependency backports, development-only clients and bounded test tools, public provenance, licence material and operator documentation. It excludes production keys, wallet secrets, private operational evidence, chain databases and private repository history.
+This is a source-only release. It does not publish a newly reproduced or signed node binary. The tree contains the deployed runtime/node source snapshot, reviewed dependency backports, development-only clients and bounded test tools, public provenance, licence material and operator documentation. The proposed change preserves the canonical repository's existing V13 baseline and dependabot commit history; making the repository public would expose that reachable history and existing repository surfaces. Production keys, wallet secrets, private operational evidence and chain databases are excluded from the prepared source tree.
 
 Two retained lockfile versions match public dependency advisory ranges. See [dependency advisory status](DEPENDENCY-ADVISORIES-20260919.md). Review [security reporting](../SECURITY.md), [build instructions](BUILD.md), [validation limits](VALIDATION.md) and [operator guidance](OPERATORS.md) before use.
