@@ -149,6 +149,7 @@ fn new_test_ext_with_validator_bond(
     };
     let mut ext = sp_io::TestExternalities::new(storage);
     ext.execute_with(|| {
+        v14_migration::mark_historical_spec15_fixture();
         System::set_block_number(1);
         let current = fixture
             .validators
@@ -4152,6 +4153,7 @@ fn v13_migration_test_ext() -> sp_io::TestExternalities {
 
     let mut ext = sp_io::TestExternalities::new(storage);
     ext.execute_with(|| {
+        v14_migration::mark_historical_spec15_fixture();
         System::set_block_number(1_830_990);
         v13_migration::test_initialize_community_staking();
         frame_support::storage::unhashed::put(

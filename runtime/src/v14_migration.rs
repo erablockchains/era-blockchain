@@ -21,6 +21,36 @@ use crate::{
     SecurityBudgetTotalStakingRewards, Session, Staking, System, VERSION,
 };
 
+// Historical migration tests retain their spec15 input identity when compiled
+// into a later successor runtime. This key and branch do not exist in the
+// production Wasm; production always validates VERSION.spec_version below.
+#[cfg(test)]
+const HISTORICAL_SPEC15_FIXTURE_KEY: &[u8] = b":test:era-v14-historical-spec15";
+
+#[cfg(test)]
+pub(crate) fn mark_historical_spec15_fixture() {
+    sp_io::storage::set(HISTORICAL_SPEC15_FIXTURE_KEY, &15u32.to_le_bytes());
+}
+
+fn migration_spec_version() -> u32 {
+    #[cfg(test)]
+    if let Some(value) = sp_io::storage::get(HISTORICAL_SPEC15_FIXTURE_KEY) {
+        assert_eq!(value.as_ref(), &15u32.to_le_bytes());
+        return 15;
+    }
+    VERSION.spec_version
+}
+
+#[cfg(test)]
+#[test]
+fn successor_without_historical_fixture_keeps_pending_migration_guard_closed() {
+    let mut ext = sp_io::TestExternalities::default();
+    ext.execute_with(|| {
+        assert_eq!(migration_spec_version(), 16);
+        assert!(!matches!(migration_spec_version(), 14 | 15));
+    });
+}
+
 #[cfg(feature = "try-runtime")]
 use crate::{AccountId, Balance};
 
@@ -154,7 +184,7 @@ fn validate_active_validators() -> Result<u32, DispatchError> {
 
 fn validate_monetary_state() -> DispatchResult {
     ensure!(
-        matches!(VERSION.spec_version, 14 | 15),
+        matches!(migration_spec_version(), 14 | 15),
         DispatchError::Other("V14 migration requires supported runtime spec14 or completion spec15")
     );
     ensure!(

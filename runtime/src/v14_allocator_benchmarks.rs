@@ -36,8 +36,12 @@ benchmarks! {
  verify {assert_eq!(NextItemId::<Runtime>::get(1),Some(Some(1)));assert!(!MintGuard::<Runtime>::exists());}
  admit_existing_asset {setup();assert_ok!(Assets::create(RuntimeOrigin::signed(who(0)),7,MultiAddress::Id(who(1)),1));assert_ok!(Assets::set_metadata(RuntimeOrigin::signed(who(0)),7,vec![b'n';64],vec![b's';16],18));close();assert_ok!(EraV14AssetAllocator::initialize(RuntimeOrigin::root(),Some(8),Some(1),[1;32]));}: {EraV14AssetAllocator::admit_existing_asset(RuntimeOrigin::root(),7,1)?;}
  admit_existing_collection {setup();pallet_nfts::NextCollectionId::<Runtime>::put(1);assert_ok!(Nfts::create(RuntimeOrigin::signed(who(0)),MultiAddress::Id(who(2)),Default::default()));assert_ok!(Nfts::set_team(RuntimeOrigin::signed(who(0)),1,Some(MultiAddress::Id(who(1))),Some(MultiAddress::Id(who(2))),Some(MultiAddress::Id(who(3)))));assert_ok!(Nfts::set_collection_metadata(RuntimeOrigin::signed(who(2)),1,vec![b'm';128].try_into().unwrap()));close();assert_ok!(EraV14AssetAllocator::initialize(RuntimeOrigin::root(),Some(1),Some(2),[1;32]));}: {EraV14AssetAllocator::admit_existing_collection(RuntimeOrigin::root(),1,Some(1),[2;32])?;}
- legacy_create_absent {setup();}: {assert!(a::CreateOrigin::<0>::try_origin(RuntimeOrigin::signed(who(0)),&7).is_ok());}
+ legacy_create_absent {setup();close();}: {assert!(a::CreateOrigin::<0>::try_origin(RuntimeOrigin::signed(who(0)),&7).is_err());}
  legacy_create_present {setup();init();CreationGuard::<Runtime>::put((0,7));}: {assert!(a::CreateOrigin::<0>::try_origin(RuntimeOrigin::signed(who(0)),&7).is_ok());}
+ cutover_first {setup();}: {let _=<EraV14AssetAllocator as Hooks<BlockNumber>>::on_runtime_upgrade();}
+ verify {assert_eq!(LegacyCreationClosedAt::<Runtime>::get(),Some(101));}
+ cutover_repeat {setup();close();}: {let _=<EraV14AssetAllocator as Hooks<BlockNumber>>::on_runtime_upgrade();}
+ verify {assert_eq!(LegacyCreationClosedAt::<Runtime>::get(),Some(101));}
  legacy_item_absent {setup();}: {assert!(a::ItemGuard::contains(&(1,1)));}
  legacy_item_present {setup();init();collection();MintGuard::<Runtime>::put((1,1));}: {assert!(a::ItemGuard::contains(&(1,1)));}
  api_assets_max {setup();init();asset_page();}: {let p=a::Api::assets_v1(None,64).unwrap();assert_eq!(p.entries.len(),64);assert!(p.next.is_some());}

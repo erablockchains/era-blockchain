@@ -42,7 +42,8 @@ fn successor_upgrade_closes_legacy_creation_without_rewriting_existing_rights(){
  let collection_before=pallet_nfts::Collection::<Runtime>::get(0).unwrap().encode();
  let issuance=Balances::total_issuance();let reserved=Balances::reserved_balance(who(1));
  System::set_block_number(42);close();
- assert_eq!(LegacyCreationClosedAt::<Runtime>::get(),Some(42));
+ assert_eq!(System::block_number(),42);
+ assert_eq!(LegacyCreationClosedAt::<Runtime>::get(),Some(43));
  assert_eq!(pallet_assets::Asset::<Runtime>::get(7).unwrap().encode(),asset_before);
  assert_eq!(pallet_nfts::Collection::<Runtime>::get(0).unwrap().encode(),collection_before);
  assert_eq!(Balances::total_issuance(),issuance);assert_eq!(Balances::reserved_balance(who(1)),reserved);
@@ -56,11 +57,11 @@ fn successor_upgrade_closes_legacy_creation_without_rewriting_existing_rights(){
  assert_ok!(Nfts::mint(signed(2),0,1,MultiAddress::Id(who(3)),None));
  assert_ok!(Nfts::transfer(signed(3),0,1,MultiAddress::Id(who(5))));
  assert_eq!(pallet_nfts::Item::<Runtime>::get(0,1).unwrap().owner,who(5));
- System::set_block_number(43);let before=root();close();assert_eq!(LegacyCreationClosedAt::<Runtime>::get(),Some(42));assert_eq!(before,root());
+ System::set_block_number(43);let before=root();close();assert_eq!(LegacyCreationClosedAt::<Runtime>::get(),Some(43));assert_eq!(before,root());
  assert_noop!(System::kill_storage(signed(1),vec![LegacyCreationClosedAt::<Runtime>::hashed_key().to_vec()]),sp_runtime::DispatchError::BadOrigin);
- assert_eq!(LegacyCreationClosedAt::<Runtime>::get(),Some(42));
+ assert_eq!(LegacyCreationClosedAt::<Runtime>::get(),Some(43));
  assert_ok!(EraV14AssetAllocator::initialize(RuntimeOrigin::root(),Some(8),Some(1),[1;32]));
- assert_eq!(LegacyCreationClosedAt::<Runtime>::get(),Some(42));
+ assert_eq!(LegacyCreationClosedAt::<Runtime>::get(),Some(43));
 });}
 #[test]
 fn closure_survives_sudo_as_and_bypass_filter_dispatch(){ext().execute_with(||{
@@ -74,7 +75,7 @@ fn closure_survives_sudo_as_and_bypass_filter_dispatch(){ext().execute_with(||{
  assert_ok!(Sudo::sudo_as(signed(6),MultiAddress::Id(who(1)),Box::new(nft)));
  assert!(!pallet_assets::Asset::<Runtime>::contains_key(9));
  assert!(!pallet_nfts::Collection::<Runtime>::contains_key(0));
- assert_eq!(LegacyCreationClosedAt::<Runtime>::get(),Some(42));
+ assert_eq!(LegacyCreationClosedAt::<Runtime>::get(),Some(43));
 });}
 #[test]
 fn allocator_creates_native_backends_with_explicit_roles_and_exact_deposits(){ext().execute_with(||{

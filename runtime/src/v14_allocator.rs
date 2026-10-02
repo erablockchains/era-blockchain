@@ -6,7 +6,7 @@ use era_v14_application_primitives::assets::{v1,IdRange};
 use codec::{Encode,Decode,DecodeWithMemTracking,MaxEncodedLen};
 use scale_info::TypeInfo;
 use frame_support::{pallet_prelude::*,traits::{Contains,EnsureOriginWithArg},weights::Weight};
-use sp_runtime::{DispatchError,MultiAddress};
+use sp_runtime::{DispatchError,MultiAddress,Saturating};
 
 #[derive(Encode,Decode,DecodeWithMemTracking,MaxEncodedLen,TypeInfo,Clone,PartialEq,Eq,Debug)]
 pub struct AssetPermit {pub creator:AccountId,pub minimum:u128}
@@ -101,9 +101,15 @@ pub mod pallet {
  impl<T:Config> Hooks<frame_system::pallet_prelude::BlockNumberFor<T>> for Pallet<T>{
   fn on_runtime_upgrade()->Weight{
    let db=T::DbWeight::get();
-   if LegacyCreationClosedAt::<T>::exists(){return db.reads(1)}
-   LegacyCreationClosedAt::<T>::put(frame_system::Pallet::<T>::block_number());
-   db.reads_writes(1,1)
+   // Independent compiled-Wasm maxima (50 steps, 20 repeats, two captures),
+   // with 25% time/proof headroom. The DB operations are charged separately.
+   if LegacyCreationClosedAt::<T>::exists(){
+    return Weight::from_parts(3_625_000,1_862).saturating_add(db.reads(1))
+   }
+   // Executive runs upgrade hooks before initializing the successor block.
+   // Record the first block governed by this runtime, not the prior block.
+   LegacyCreationClosedAt::<T>::put(frame_system::Pallet::<T>::block_number().saturating_add(1u32.into()));
+   Weight::from_parts(7_125_000,1_862).saturating_add(db.reads_writes(1,1))
   }
  }
  #[pallet::call]

@@ -207,9 +207,18 @@ fn v14_integrated_actual_executive_migrates_and_replays_preserving_authorities_a
             Ok(19_952_086_627_377_701_116_381_613)
         );
         assert!(!SecurityBudget::active());
-        for prefix in [b"EraV14Amm".as_slice(), b"EraV14AssetAllocator"] {
-            assert_eq!(namespace(prefix),vec![(frame_support::storage::storage_prefix(prefix,frame_support::traits::STORAGE_VERSION_STORAGE_KEY_POSTFIX).to_vec(),0u16.encode())]);
-        }
+        let version_key = |prefix| frame_support::storage::storage_prefix(
+            prefix,
+            frame_support::traits::STORAGE_VERSION_STORAGE_KEY_POSTFIX,
+        ).to_vec();
+        assert_eq!(namespace(b"EraV14Amm"), vec![(version_key(b"EraV14Amm"), 0u16.encode())]);
+        let mut allocator_expected = vec![
+            (version_key(b"EraV14AssetAllocator"), 0u16.encode()),
+            (crate::v14_allocator::LegacyCreationClosedAt::<Runtime>::hashed_key().to_vec(), System::block_number().saturating_add(1).encode()),
+        ];
+        allocator_expected.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(namespace(b"EraV14AssetAllocator"), allocator_expected);
+        assert!(!crate::v14_allocator::SchemaVersion::<Runtime>::exists());
         assert_eq!(
             System::events()
                 .into_iter()
