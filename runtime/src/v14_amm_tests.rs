@@ -988,7 +988,7 @@ fn dormant_signed_envelopes_and_sdk_outputs_use_adopted_codecs_without_runtime_e
             Err(E::UnsupportedAsset)
         );
         assert!(contract::ADMITTED_PAIRS.is_empty());
-        assert_eq!(crate::VERSION.spec_version, 15);
+        assert_eq!(crate::VERSION.spec_version, 16);
         assert_eq!(crate::VERSION.transaction_version, 1);
     });
 }

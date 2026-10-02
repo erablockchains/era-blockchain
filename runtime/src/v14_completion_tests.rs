@@ -625,9 +625,9 @@ fn sdk_all_25_current_calls_decode_in_the_actual_runtime_and_keep_existing_indic
     let extrinsic = UncheckedExtrinsic::decode(&mut input).unwrap();
     assert!(input.is_empty());
     assert_eq!(extrinsic.encode(), encoded);
-    // Codec compatibility does not make the old spec14 signature valid on spec15.
+    // Codec compatibility does not make the old spec14 signature valid on the successor runtime.
     assert_eq!(vectors["bindings"]["specVersion"].as_u64(), Some(14));
-    assert_eq!(VERSION.spec_version, 15);
+    assert_eq!(VERSION.spec_version, 16);
     use frame_support::traits::PalletInfo as _;
     assert_eq!(PalletInfo::index::<FounderCustody>(), Some(22));
     assert_eq!(PalletInfo::index::<FreshGenesis>(), Some(23));

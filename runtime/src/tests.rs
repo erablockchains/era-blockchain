@@ -319,7 +319,7 @@ fn assert_cancellation_metadata_surface(
 #[test]
 fn runtime_identity_and_bounds_are_exact() {
     assert_eq!(VERSION.spec_name.as_ref(), "era");
-    assert_eq!(VERSION.spec_version, 15);
+    assert_eq!(VERSION.spec_version, 16);
     assert_eq!(VERSION.transaction_version, 1);
     assert_eq!(VERSION.state_version(), sp_runtime::StateVersion::V1);
     assert_eq!(MaxElectingVoters::get(), 64);

@@ -29,13 +29,14 @@ impl AdmissionLookup for Admissions {
  }
 }
 pub type Api=backend::SdkReader<Admissions>;
-// The same owning-origin gate runs even through sudo_as / dispatch_bypass_filter.
-// Before explicit initialization, retained legacy creation permissions are unchanged.
+// The owning-origin gate runs even through sudo_as / dispatch_bypass_filter.
+// The upgrade hook closes legacy creation before the first new-runtime extrinsic.
 pub struct CreateOrigin<const KIND:u8>;
 impl<const KIND:u8> EnsureOriginWithArg<RuntimeOrigin,u32> for CreateOrigin<KIND>{
  type Success=AccountId;
  fn try_origin(origin:RuntimeOrigin,id:&u32)->Result<AccountId,RuntimeOrigin>{
-  if SchemaVersion::<Runtime>::exists() && CreationGuard::<Runtime>::get()!=Some((KIND,*id)){return Err(origin)}
+  if (LegacyCreationClosedAt::<Runtime>::exists() || SchemaVersion::<Runtime>::exists())
+   && CreationGuard::<Runtime>::get()!=Some((KIND,*id)){return Err(origin)}
   frame_system::ensure_signed(origin.clone()).map_err(|_|origin)
  }
  #[cfg(feature="runtime-benchmarks")]
@@ -70,6 +71,9 @@ pub mod pallet {
  #[pallet::config]
  pub trait Config:frame_system::Config<AccountId=AccountId,RuntimeEvent:From<Event<Self>>>{}
  #[pallet::pallet] pub struct Pallet<T>(_);
+ // Written once at the start of the first block running this successor runtime.
+ // The finalized upgrade record supplies the block hash; this scalar records the height.
+ #[pallet::storage] pub type LegacyCreationClosedAt<T:Config> = StorageValue<_,frame_system::pallet_prelude::BlockNumberFor<T>,OptionQuery>;
  #[pallet::storage] pub type SchemaVersion<T> = StorageValue<_,u16,OptionQuery>;
  // OptionQuery distinguishes absence from stored None (exhaustion).
  #[pallet::storage] pub type NextAssetId<T> = StorageValue<_,Option<u32>,OptionQuery>;
@@ -92,7 +96,16 @@ pub mod pallet {
   LegacyAssetAdmitted{id:u32},LegacyCollectionAdmitted{id:u32,next_item:Option<u32>,evidence:[u8;32]},
  }
  #[pallet::error]
- pub enum Error<T>{Uninitialized,AlreadyInitialized,InvalidEvidence,InvalidCursor,Occupied,NotPermitted,InvalidMinimum,BackendInvariant,AllocationFailed,Reentrant,NativeCursorAhead,Unsupported}
+ pub enum Error<T>{Uninitialized,AlreadyInitialized,InvalidEvidence,InvalidCursor,Occupied,NotPermitted,InvalidMinimum,BackendInvariant,AllocationFailed,Reentrant,NativeCursorAhead,Unsupported,LegacyCreationNotClosed}
+ #[pallet::hooks]
+ impl<T:Config> Hooks<frame_system::pallet_prelude::BlockNumberFor<T>> for Pallet<T>{
+  fn on_runtime_upgrade()->Weight{
+   let db=T::DbWeight::get();
+   if LegacyCreationClosedAt::<T>::exists(){return db.reads(1)}
+   LegacyCreationClosedAt::<T>::put(frame_system::Pallet::<T>::block_number());
+   db.reads_writes(1,1)
+  }
+ }
  #[pallet::call]
  impl<T:Config> Pallet<T>{
   /// Cursors must come from owner-approved historical high-water evidence. No scan or reset.
@@ -100,17 +113,23 @@ pub mod pallet {
   pub fn initialize(origin:OriginFor<T>,next_asset:Option<u32>,next_collection:Option<u32>,evidence:[u8;32])->DispatchResult{
    ensure_root(origin)?;
    ensure!(evidence!=[0;32],Error::<T>::InvalidEvidence);
-   // One bounded prefix probe also rejects orphaned maps/guards, not just scalar keys.
+   ensure!(LegacyCreationClosedAt::<T>::exists(),Error::<T>::LegacyCreationNotClosed);
+   // Bounded namespace probe permits only the cutover marker and empty FRAME version.
+   // Other allocator state, including orphaned maps/guards, still blocks initialization.
    let prefix=frame_support::storage::storage_prefix(b"EraV14AssetAllocator",b"");
    let pallet_prefix=&prefix[..16];
    ensure!(!sp_io::storage::exists(pallet_prefix),Error::<T>::AlreadyInitialized);
    let frame_version=StorageVersion::storage_key::<Pallet<T>>();
-   let mut first=sp_io::storage::next_key(pallet_prefix);
-   if first.as_deref()==Some(&frame_version[..]) {
-    let mut bytes=[0u8;2];ensure!(sp_io::storage::read(&frame_version,&mut bytes,0)==Some(2)&&bytes==[0,0],Error::<T>::BackendInvariant);
-    first=sp_io::storage::next_key(&frame_version);
+   let cutover=LegacyCreationClosedAt::<T>::hashed_key();
+   let mut cursor=pallet_prefix.to_vec();
+   for _ in 0..3 {
+    let Some(key)=sp_io::storage::next_key(&cursor) else {break};
+    if !key.starts_with(pallet_prefix){break}
+    if key==frame_version {
+     let mut bytes=[0u8;2];ensure!(sp_io::storage::read(&frame_version,&mut bytes,0)==Some(2)&&bytes==[0,0],Error::<T>::BackendInvariant);
+    } else {ensure!(key==cutover,Error::<T>::AlreadyInitialized)}
+    cursor=key;
    }
-   ensure!(!first.is_some_and(|key|key.starts_with(pallet_prefix)),Error::<T>::AlreadyInitialized);
    Self::valid_cursor(next_asset,v1::REGISTERED_FIRST,v1::REGISTERED_LAST)?;
    Self::valid_cursor(next_collection,v1::COLLECTION_FIRST,v1::COLLECTION_LAST)?;
    if let Some(id)=next_asset{ensure!(!pallet_assets::Asset::<Runtime>::contains_key(id),Error::<T>::Occupied)}
