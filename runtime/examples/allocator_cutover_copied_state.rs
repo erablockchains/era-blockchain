@@ -37,6 +37,7 @@ fn main() {
     assert_eq!(summary["finalized_head"], header_json["requestedHash"]);
     assert_eq!(summary["finalized_height"], header_json["height"]);
     assert_eq!(summary["runtime"]["specVersion"].as_u64(), Some(15));
+    assert_eq!(summary["runtime"]["stateVersion"].as_u64(), Some(1));
     assert_eq!(summary["onchain_code_sha256"].as_str(), Some("122af167022227c46b2b74d99f5d3a73f41f8d65bb4a8a1de7b88b6e986de2af"));
     let pairs = state_json["state"].as_object().expect("state key-value map");
     assert!(pairs.len() > 0);
@@ -51,9 +52,18 @@ fn main() {
         storage.top.insert(from_hex(key), from_hex(value.as_str().expect("storage value hex")));
     }
     let expected_root = from_hex(header_json["header"]["stateRoot"].as_str().expect("header state root"));
-    let mut ext = sp_io::TestExternalities::new(storage);
+    // The default constructor overwrites :code with empty bytes and uses V0.
+    // Reinsert the authenticated code and construct the backend with V1.
+    let code = storage.top.remove(b":code".as_slice()).expect("export includes :code");
+    let mut ext = sp_io::TestExternalities::new_with_code_and_state(&code, storage, StateVersion::V1);
     ext.execute_with(|| {
         let before_root = sp_io::storage::root(StateVersion::V1);
+        if before_root != expected_root {
+            eprintln!("state root diagnostic: imported_keys={} enumerated_keys={} v0={:02x?} v1={:02x?} expected={:02x?}",
+                pairs.len(), top_state().len(),
+                sp_io::storage::root(StateVersion::V0),
+                before_root, expected_root);
+        }
         assert_eq!(before_root, expected_root, "retained state must match finalized header root");
         let before = top_state();
         assert_eq!(before.len(), pairs.len());
