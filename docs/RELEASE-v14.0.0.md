@@ -1,6 +1,6 @@
 # ERA Blockchain V14.0.0 release notes
 
-This document describes the proposed `v14.0.0-rc.1` **source prerelease**. The tag and GitHub release do not exist until separately approved and published. Source publication is separate from full V14 production acceptance.
+This document preserves the original `v14.0.0-rc.1` **source prerelease** identity and dated spec15 scope. That tag and release are now public. The later deployed spec16 creation-control successor and accepted NFT commissioning are described in the current [README](../README.md), [validation](VALIDATION.md) and [feature status](FEATURE-STATUS.md). A successor source integration or new tag must not silently rewrite the existing prerelease identity. Source publication remains separate from full V14 programme acceptance.
 
 ## Deployed identity
 
@@ -16,7 +16,7 @@ The authenticated node release is accepted on all nine production hosts. The spe
 
 V14 deploys native ETKN transfers, BABE/GRANDPA consensus, staking, capped SecurityBudget accrual, founder vesting and custody, native Assets/NFT primitives, the allocator/API runtime capability, World registry, and restrictive AI onboarding controls. The dedicated ERA Metadata Service serves the four approved objects over HTTPS.
 
-Production allocator initialization, NFT funding/mint/ownership/sale/swap commissioning, the first legitimate SecurityBudget reward payment, and penalty-policy activation remain ordered V14 acceptance work. Source presence and synthetic tests do not claim those actions occurred. AMM and AI predictive-tokenization/model-service commissioning remain inactive and are deferred to V15. Sentry/private metadata storage is outside V14.
+At this prerelease's publication, allocator initialization and NFT funding/mint/ownership/sale/swap commissioning were still open. They later finalized under the authenticated spec16 successor; see the current validation record. The first legitimate SecurityBudget reward payment and penalty-policy activation remain open. AMM and AI predictive-tokenization/model-service commissioning remain inactive and are deferred to V15. Sentry/private metadata storage is outside V14.
 
 Website R6 and the separately built native Windows/Android wallet downloads are outside this source archive. Android evidence is owner-performed. Checks for update/account preservation, ERA/spec15 connectivity, receiving QR switching and scanner behavior passed. Android build4 then passed the targeted read-only reward inspection on owner hardware; no claim occurred. Independent qualification and final programme acceptance are not claimed by this source prerelease.
 

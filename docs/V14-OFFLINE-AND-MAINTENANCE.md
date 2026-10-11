@@ -1,5 +1,7 @@
 # State-preserving operational checks
 
+> Historical operator material: the spec14→15 supervisor transition below describes the original release path. Production later deployed spec16 and required a separate authenticated nine-host supervisor successor to recognize its exact code identity. Do not reuse the old spec14/spec15-only overlay for the current spec16 fleet.
+
 Use the exact archived raw genesis specification for check-block, export-blocks, export-state, import-blocks and revert. These commands now reconstruct its genesis hash in memory, preserving its `:code`, child state and Wasm state version, and compare it with the database genesis before running the requested operation. A newly built `--dev` specification is not a substitute for an existing database's genesis. This local correction has not been installed in production.
 
 On disposable database copies, all five commands refused the wrong genesis; correct-genesis checking succeeded; resuming an interrupted binary import reproduced all188 retained block81 top-state entries; a normal large revert stopped at finalized block1 and preserved the genesis/finality hashes. This does not authorize production reverts or claim that finalized runtime upgrades can be rolled back by replacing a binary.
