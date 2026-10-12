@@ -1,6 +1,6 @@
 use crate::{*,v14_allocator::{self as a,*}};
 use era_v14_application_primitives::assets::v1::{self,EraV14AssetsApiV1};
-use frame_support::{assert_ok,assert_noop,traits::Currency};
+use frame_support::{assert_ok,assert_noop,traits::{Currency,Hooks}};
 use sp_runtime::{BuildStorage,MultiAddress,StateVersion};
 use codec::Encode;
 fn who(n:u8)->AccountId {AccountId::new([n;32])}
@@ -11,15 +11,18 @@ fn ext()->sp_io::TestExternalities{
  pallet_balances::GenesisConfig::<Runtime>{balances:(1..=6).map(|n|(who(n),1000*DECIMALS)).collect(),dev_accounts:None}.assimilate_storage(&mut storage).unwrap();
  let mut ext=sp_io::TestExternalities::new(storage);ext.execute_with(||System::set_block_number(1));ext
 }
-fn init(asset:u32,collection:u32){assert_ok!(EraV14AssetAllocator::initialize(RuntimeOrigin::root(),Some(asset),Some(collection),[1;32]));}
+fn close(){let _=<EraV14AssetAllocator as Hooks<BlockNumber>>::on_runtime_upgrade();}
+fn init(asset:u32,collection:u32){close();assert_ok!(EraV14AssetAllocator::initialize(RuntimeOrigin::root(),Some(asset),Some(collection),[1;32]));}
 fn asset(){assert_ok!(EraV14AssetAllocator::permit_asset(RuntimeOrigin::root(),who(1),1));assert_ok!(EraV14AssetAllocator::create_asset(signed(1),who(2),who(3),who(4)));}
 fn collection(){assert_ok!(EraV14AssetAllocator::permit_collection(RuntimeOrigin::root(),who(1)));assert_ok!(EraV14AssetAllocator::create_collection(signed(1),who(2),who(3),who(4)));}
 #[test]
 fn allocator_initialization_is_explicit_bounded_and_never_resets(){ext().execute_with(||{
  assert_eq!(a::Api::assets_v1(None,64),Err(v1::AssetApiErrorV1::Unconfigured));
  assert_noop!(EraV14AssetAllocator::initialize(signed(1),Some(1),Some(1),[1;32]),sp_runtime::DispatchError::BadOrigin);
- assert_noop!(EraV14AssetAllocator::initialize(RuntimeOrigin::root(),Some(0),Some(1),[1;32]),a::Error::<Runtime>::InvalidCursor);
  assert_noop!(EraV14AssetAllocator::initialize(RuntimeOrigin::root(),Some(1),Some(1),[0;32]),a::Error::<Runtime>::InvalidEvidence);
+ assert_noop!(EraV14AssetAllocator::initialize(RuntimeOrigin::root(),Some(1),Some(1),[1;32]),a::Error::<Runtime>::LegacyCreationNotClosed);
+ close();
+ assert_noop!(EraV14AssetAllocator::initialize(RuntimeOrigin::root(),Some(0),Some(1),[1;32]),a::Error::<Runtime>::InvalidCursor);
  init(1,1);let before=root();assert!(EraV14AssetAllocator::initialize(RuntimeOrigin::root(),Some(2),Some(2),[2;32]).is_err());assert_eq!(before,root());
  assert_eq!(NextAssetId::<Runtime>::get(),Some(Some(1)));
  let key=NextAssetId::<Runtime>::hashed_key();assert_eq!(sp_io::storage::get(&key).unwrap().as_ref(),Some(1u32).encode());
@@ -27,8 +30,52 @@ fn allocator_initialization_is_explicit_bounded_and_never_resets(){ext().execute
 #[test]
 fn allocator_rejects_orphaned_state_and_occupied_initial_candidates(){ext().execute_with(||{
  assert_ok!(Assets::create(signed(1),7,MultiAddress::Id(who(1)),1));
+ close();
  assert_noop!(EraV14AssetAllocator::initialize(RuntimeOrigin::root(),Some(7),Some(1),[1;32]),a::Error::<Runtime>::Occupied);
  NextItemId::<Runtime>::insert(5,Some(1));let before=root();assert!(EraV14AssetAllocator::initialize(RuntimeOrigin::root(),Some(8),Some(1),[1;32]).is_err());assert_eq!(before,root());
+});}
+#[test]
+fn successor_upgrade_closes_legacy_creation_without_rewriting_existing_rights(){ext().execute_with(||{
+ assert_ok!(Assets::create(signed(1),7,MultiAddress::Id(who(2)),1));
+ assert_ok!(Nfts::create(signed(1),MultiAddress::Id(who(2)),Default::default()));
+ let asset_before=pallet_assets::Asset::<Runtime>::get(7).unwrap().encode();
+ let collection_before=pallet_nfts::Collection::<Runtime>::get(0).unwrap().encode();
+ let issuance=Balances::total_issuance();let reserved=Balances::reserved_balance(who(1));
+ System::set_block_number(42);close();
+ assert_eq!(System::block_number(),42);
+ assert_eq!(LegacyCreationClosedAt::<Runtime>::get(),Some(43));
+ assert_eq!(pallet_assets::Asset::<Runtime>::get(7).unwrap().encode(),asset_before);
+ assert_eq!(pallet_nfts::Collection::<Runtime>::get(0).unwrap().encode(),collection_before);
+ assert_eq!(Balances::total_issuance(),issuance);assert_eq!(Balances::reserved_balance(who(1)),reserved);
+ assert!(!SchemaVersion::<Runtime>::exists());
+ assert_noop!(Assets::create(signed(1),8,MultiAddress::Id(who(2)),1),sp_runtime::DispatchError::BadOrigin);
+ assert_noop!(Nfts::create(signed(1),MultiAddress::Id(who(2)),Default::default()),sp_runtime::DispatchError::BadOrigin);
+ assert_noop!(Assets::force_create(RuntimeOrigin::root(),8,MultiAddress::Id(who(2)),false,1),sp_runtime::DispatchError::BadOrigin);
+ assert_noop!(Nfts::force_create(RuntimeOrigin::root(),MultiAddress::Id(who(2)),Default::default()),sp_runtime::DispatchError::BadOrigin);
+ assert_ok!(Assets::mint(signed(2),7,MultiAddress::Id(who(3)),1000));
+ assert_ok!(Assets::transfer(signed(3),7,MultiAddress::Id(who(5)),100));
+ assert_ok!(Nfts::mint(signed(2),0,1,MultiAddress::Id(who(3)),None));
+ assert_ok!(Nfts::transfer(signed(3),0,1,MultiAddress::Id(who(5))));
+ assert_eq!(pallet_nfts::Item::<Runtime>::get(0,1).unwrap().owner,who(5));
+ System::set_block_number(43);let before=root();close();assert_eq!(LegacyCreationClosedAt::<Runtime>::get(),Some(43));assert_eq!(before,root());
+ assert_noop!(System::kill_storage(signed(1),vec![LegacyCreationClosedAt::<Runtime>::hashed_key().to_vec()]),sp_runtime::DispatchError::BadOrigin);
+ assert_eq!(LegacyCreationClosedAt::<Runtime>::get(),Some(43));
+ assert_ok!(EraV14AssetAllocator::initialize(RuntimeOrigin::root(),Some(8),Some(1),[1;32]));
+ assert_eq!(LegacyCreationClosedAt::<Runtime>::get(),Some(43));
+});}
+#[test]
+fn closure_survives_sudo_as_and_bypass_filter_dispatch(){ext().execute_with(||{
+ pallet_sudo::Key::<Runtime>::put(who(6));System::set_block_number(42);close();
+ let asset=RuntimeCall::Assets(pallet_assets::Call::create{id:9,admin:MultiAddress::Id(who(1)),min_balance:1});
+ let nft=RuntimeCall::Nfts(pallet_nfts::Call::create{admin:MultiAddress::Id(who(1)),config:Default::default()});
+ use frame_support::traits::UnfilteredDispatchable;
+ assert_eq!(asset.clone().dispatch_bypass_filter(signed(1)).unwrap_err().error,sp_runtime::DispatchError::BadOrigin);
+ assert_eq!(nft.clone().dispatch_bypass_filter(signed(1)).unwrap_err().error,sp_runtime::DispatchError::BadOrigin);
+ assert_ok!(Sudo::sudo_as(signed(6),MultiAddress::Id(who(1)),Box::new(asset)));
+ assert_ok!(Sudo::sudo_as(signed(6),MultiAddress::Id(who(1)),Box::new(nft)));
+ assert!(!pallet_assets::Asset::<Runtime>::contains_key(9));
+ assert!(!pallet_nfts::Collection::<Runtime>::contains_key(0));
+ assert_eq!(LegacyCreationClosedAt::<Runtime>::get(),Some(43));
 });}
 #[test]
 fn allocator_creates_native_backends_with_explicit_roles_and_exact_deposits(){ext().execute_with(||{

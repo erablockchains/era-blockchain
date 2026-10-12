@@ -149,6 +149,7 @@ fn new_test_ext_with_validator_bond(
     };
     let mut ext = sp_io::TestExternalities::new(storage);
     ext.execute_with(|| {
+        v14_migration::mark_historical_spec15_fixture();
         System::set_block_number(1);
         let current = fixture
             .validators
@@ -319,7 +320,7 @@ fn assert_cancellation_metadata_surface(
 #[test]
 fn runtime_identity_and_bounds_are_exact() {
     assert_eq!(VERSION.spec_name.as_ref(), "era");
-    assert_eq!(VERSION.spec_version, 15);
+    assert_eq!(VERSION.spec_version, 16);
     assert_eq!(VERSION.transaction_version, 1);
     assert_eq!(VERSION.state_version(), sp_runtime::StateVersion::V1);
     assert_eq!(MaxElectingVoters::get(), 64);
@@ -4152,6 +4153,7 @@ fn v13_migration_test_ext() -> sp_io::TestExternalities {
 
     let mut ext = sp_io::TestExternalities::new(storage);
     ext.execute_with(|| {
+        v14_migration::mark_historical_spec15_fixture();
         System::set_block_number(1_830_990);
         v13_migration::test_initialize_community_staking();
         frame_support::storage::unhashed::put(
