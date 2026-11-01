@@ -6,6 +6,7 @@ export const READ_ONLY_RPC_METHODS = Object.freeze([
   "system_version",
   "system_health",
   "chain_getHeader",
+  "chain_getFinalizedHead",
   "chain_getBlockHash",
   "chain_getBlock",
   "state_getRuntimeVersion",
@@ -184,6 +185,27 @@ export class EraReadOnlyClient {
   async getGenesisHash() {
     const hash = await this.#request("chain_getBlockHash", [0]);
     return requireHash(hash, "genesis hash");
+  }
+
+  async getFinalizedHead() {
+    return requireHash(await this.#request("chain_getFinalizedHead"), "finalized head");
+  }
+
+  async getHeader(at) {
+    const header = await this.#request("chain_getHeader", [requireHash(at, "at")]);
+    if (!header || typeof header.number !== "string" || !/^0x[0-9a-fA-F]+$/.test(header.number)) {
+      throw new EraRpcError("chain header response had an unexpected shape", { method: "chain_getHeader" });
+    }
+    return header;
+  }
+
+  async getRuntimeVersion(at) {
+    const runtime = await this.#request("state_getRuntimeVersion", [requireHash(at, "at")]);
+    if (!runtime || typeof runtime.specName !== "string" || !Number.isSafeInteger(runtime.specVersion) ||
+        !Number.isSafeInteger(runtime.transactionVersion) || !Number.isSafeInteger(runtime.stateVersion)) {
+      throw new EraRpcError("runtime version response had an unexpected shape", { method: "state_getRuntimeVersion" });
+    }
+    return runtime;
   }
 
   async getMetadataHex(at = undefined) {

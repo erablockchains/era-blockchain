@@ -61,3 +61,19 @@ specification and transaction versions, captured metadata, signed-extension orde
 nonce, tip and checkpoint hash before constructing an opaque extrinsic. It never handles private
 keys and has no submission method. The sample wallet example and all signatures are synthetic and
 mocked; live wallet compatibility remains an external prerequisite.
+
+## V15 SDK prerequisite: finalized spec16 identity
+
+[`sample-v15-readonly`](sample-v15-readonly/) is a separate, opt-in example. It uses the
+published [native ETKN integration kit](https://github.com/erablockchains/era-docs/tree/0d40ee6506c7b31d349f7282fff722ec677220cc/exchange-integration)
+to pin ERA's genesis, runtime spec/transaction/state versions and the SHA-256 of the retained
+spec16 metadata fixture. It reads a finalized block hash first and queries the runtime version,
+metadata and header at that same hash. A mismatch fails closed. The fixture comes from the
+kit's public `metadata.scale.hex`; the test checks its documented SHA-256 without a network.
+
+Serve this directory on loopback as above and open `sample-v15-readonly/` to inspect a
+separately supplied loopback node. The example has no signer or submission path. A passing
+identity check does not establish an operational AMM, a released developer SDK, wallet
+compatibility, a dApp deployment or new production qualification. V15-DAPP-01 still needs a
+versioned public package, independently reproduced connection and signing, and a controlled
+test transaction against the exact approved runtime.

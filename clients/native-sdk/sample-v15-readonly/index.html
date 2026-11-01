@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src http://127.0.0.1:* http://localhost:* http://[::1]:*; img-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>ERA V15 SDK identity example</title>
+  <link rel="stylesheet" href="../sample-dapp/styles.css">
+</head>
+<body><main>
+  <p class="eyebrow">LOCAL SDK EXAMPLE · READ ONLY</p>
+  <h1>Verify an ERA finalized block</h1>
+  <p>This example checks genesis, spec16 and the published metadata hash before displaying a finalized height. It does not sign, submit, activate pools or demonstrate live dApp compatibility.</p>
+  <form id="connect-form">
+    <label for="endpoint">Loopback JSON-RPC endpoint</label>
+    <div class="controls"><input id="endpoint" type="url" value="http://127.0.0.1:9944" required><button type="submit">Verify</button></div>
+  </form>
+  <p id="status" role="status" aria-live="polite">Idle. No request has been sent.</p>
+  <dl id="result" hidden>
+    <div><dt>Finalized height</dt><dd id="height"></dd></div>
+    <div><dt>Finalized hash</dt><dd id="hash"></dd></div>
+    <div><dt>Runtime spec</dt><dd id="spec"></dd></div>
+    <div><dt>Metadata SHA-256</dt><dd id="metadata"></dd></div>
+  </dl>
+</main><script type="module" src="./app.js"></script></body>
+</html>
